@@ -1,0 +1,472 @@
+---
+title: "Assigment Brief Machine Learning - Arancha Carpintero Guardiola"
+output:
+  html_document:
+    toc: true
+    toc_depth: '6'
+    df_print: paged
+  html_notebook:
+    theme: flatly
+    toc: true
+    toc_float: true
+    toc_depth: 6
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+Este proyecto tiene como objetivo implementar uno o más algoritmos the machine learning a una serie de datos y sacar ciertas conclusiones.
+
+El enfoque que le he querido dar es alrededor de los distritos del municipio de Madrid y las operaciones del SAMUR y Protección Civil. Se han recopilado datos sobre los distritos en base a este tema con el objetivo de realizar un Análisis de Componentes Principales y un Análisis Cluster.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, comment=FALSE}
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+
+# 1. Presentación de los datos
+Para hacer posible este proyecto se han recopilado un total de 8 archivos csv. 7 archivos son correspondientes a las activaciones del SAMUR y Protección Civil entre los años 2017 y 2023 (un archivo por año) y el último contiene información sobre los diferentes distritos del municipio de Madrid. Ambos archivos han sido conseguidos de los portales abiertos del Ayuntamiento y Comunidad de Madrid respectivamente. Para más información, consultar las referencias.
+
+## 1.2 - CSV de las Activaciones del SAMUR y Protección Civil
+Entre los 7 archivos disponible contamos con poco menos de 1 millón de registros. 
+
+Para que nos entendamos mejor, una activación la define el proveedor de los datos como "encargos de asistencia sanitaria que supone la activación de un recurso sanitario u otro tipo de vehículo" 
+
+Los CSV contienen las siguientes columnas:
+
+- **Año**: Año en el que ocurrió la activación.
+
+- **Mes**: Mes en el que ocurrió la activación.
+
+- **Hora Solicitud**: Hora en la cual el recurso fue activado.
+
+- **Hora Intervención**: Hora en la cual el recurso ha llegado a la escena.
+
+- **Código**: Código asignado a la activación en función de la descripción que hace el demandante de la escena.
+
+- **Distrito**: Distrito del municipio de Madrid en donde ha ocurrido la emergencia.
+
+- **Hospital**: Nombre del hospital al cual se ha trasladado el paciente.
+
+
+Es importante destacar las siguientes observaciones (descritas por el proveedor de los datos):
+- Un recurso puede ser cancelado una vez se ha activado, ya sea por el demandante o porque se ha encontrado un recurso más cercano. La activación queda registrada en el csv pero no se registra una hora de intervención, en cambio se deja ese campo vacío.
+
+- Si, por ejemplo, en un accidente de coche se requieren 3 ambulancias para atender a 3 pacientes, se registrarán tres activaciones (correspondientes a los tres recursos enviados a la escena)
+
+- Existen 100 códigos posibles para la columna "Código", todos descritos por el proveedor de los datos en un csv aparte y que adjuntaré en las referencias.
+
+- En el campo distrito, no solo se registran activaciones en los 21 distritos del municipio de Madrid, sino que también se registran los siguientes casos: Carreteras y Circunvalaciones, Pozuelo, Leganés, C.A.M. (Comunidad Autónoma de Madrid),  y Fuera del Término Municipal.
+
+- Un paciente puede no requerir asistencia hospitalaria y en ese caso se dejaría el campo hospital vacío.
+
+## 1.3 - CSV con la información de los distritos del municipio de Madrid
+Se trata de un csv pequeño, de apenas 21 filas, con información sobre los distintos distritos del municipio de Madrid. Estos serán los distritos con los que trabajaré a lo largo del proyecto. 
+
+Los distritos son: Arganzuela, Barajas, Carabanchel, Centro, Chamartín, Chamberí, Ciudad Lineal, Fuencarral, Hortaleza, Latina, Moncloa, Moratalaz, Puente de Vallecas, Retiro, Salamanca, San Blas, Tetuan, Usera, Vicálvaro, Villa de Vallecas y Villaverde.
+
+El CSV contieen las siguientes columnas:
+
+- **distrito_codigo**: Código del distrito
+
+- **distrito_nombre**: Nombre del distrito
+
+- **municipio_codigo**: Código del municipio al que pertenece el distrito
+
+- **municipio_nombre**: Nombre del municipio
+
+- **superficie_km2**: Superficie en kilómetros cuadrados del distrito
+
+- **densidad_por_km2**: Densidad de población por kilómetro cuadrado del distrito
+
+# 2. Manipulación de los datos
+En esta sección voy a presentar todo el proceso que he realizado de transformación y limpieza de datos. Me ha parecido conveniente realizar una lista con todos los puntos que debe cubrir esta manipulación, ya que disponemos de muchos archivos con muchos datos "en sucio" que hay que trabajar. Los puntos de los que hablo son:
+
+- Averiguar la codificación de los archivos para no tener problemas al leer los csv en R.
+
+- Crear una columna nueva que indique el tiempo de respuesta del recurso. Básicamente el tiempo entre la hora de solicitud y la hora de intervención.
+
+- Cambiar los nombres de las columnas por dos razones: unificar sobre todo la columna distrito, ya que será el ancla entre nuestros csv y para evitar tildes y caracteres raros que puedan entorpercer el programa.
+
+- El campo hospital como tal no nos interesa, ya que el hospital elegido puede tener mucho que ver con la ubicación de la emergencia. En cambio, he decidido cambiar esta columna a una que indique si el paciente fue hospitalizado o no. Importante tener en cuenta que si el recurso fue cancelado, el registro tendrá esta columna vacía pero no por ausencia de hospitalización, sino por cancelación del recurso.
+
+- Cambiar los nombres de los distritos para que coincidan en todos los dataframes (samur-20xx e info-distritos)
+
+- Juntar todos los archvos del SAMUR en uno solo.
+
+## 2.1. Codificación de los archivos
+Para esta parte he realizado una función de Python muy simple que me ha servido para averiguar la codificación de los archivos. Se trata de una función que recursivamente se introduce en la carpeta "data" (donde están todos mis csv) y me imprime la codificación de cada uno de los archivos que hay dentro.
+
+```{python}
+import os
+import chardet
+
+def detectEncoding(filePath): 
+    with open(filePath, 'rb') as file: 
+        detector = chardet.universaldetector.UniversalDetector() 
+        for line in file: 
+            detector.feed(line) 
+            if detector.done: 
+                break
+        detector.close() 
+    return detector.result['encoding'] 
+
+def getAllFilesWithEncoding(directory):
+    filesWithEncoding = []
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            filePath = os.path.join(root, file)
+            encoding = detectEncoding(filePath)
+            filesWithEncoding.append((filePath, encoding))
+    return filesWithEncoding
+
+csvDirectory = './data'
+filesWithEncoding = getAllFilesWithEncoding(csvDirectory)
+
+for file, encoding in filesWithEncoding:
+    name = os.path.basename(file)
+    print(f'The encoding of the file {name} is: {encoding}')
+```
+```{bash}
+The encoding of the file info-distritos.csv is: ISO-8859-1
+The encoding of the file samur-2017.csv is: ISO-8859-1
+The encoding of the file samur-2018.csv is: ISO-8859-1
+The encoding of the file samur-2019.csv is: ISO-8859-1
+The encoding of the file samur-2020.csv is: UTF-8-SIG
+The encoding of the file samur-2021.csv is: UTF-8-SIG
+The encoding of the file samur-2022.csv is: UTF-8-SIG
+The encoding of the file samur-2023.csv is: UTF-8-SIG
+```
+Sorprendentemente, los archivos del SAMUR no son homogéneos en cuanto a codificación, y será importante tenerlo en cuenta a la hora de leer los csv en R.
+
+## 2.2. Manipulación de los archivos del SAMUR
+El primer paso será leer los 7 archivos en 7 dataframes diferentes para posteriormente combinarlos todos en uno solo. En mi caso los meteré todos en una lista para ir manipulandolos poco a poco. De primeras ya he decidido que todos las celdas cuyo valor sea un espacio o estén vacías serán tratadas como NA. Además, ya aprovecho para asignar nuevos nombres a las columnas.
+
+```{r}
+csvNames <- list.files(path = "./data/samur", pattern = "\\.csv$", full.names = TRUE)
+dfList <- list()
+
+for (csv in csvNames) {
+  encoding <- ifelse(grepl("2017|2018|2019", csv), "ISO-8859-1", "UTF-8")
+  df <- read.csv(csv, sep = ";", header = TRUE, fileEncoding = encoding, na.strings = c("", " "))
+  
+  names(df) <- c("anio", "mes", "hora_solicitud", "hora_intervencion", "codigo", "distrito", "hospital")
+  
+  dfList[[length(dfList) + 1]] <- df
+}
+```
+
+El siguiente paso será transformar los datos según los requisitos antes definidos.
+
+```{r}
+monthMapping <- c("ENERO" = 1, "FEBRERO" = 2, "MARZO" = 3, "ABRIL" = 4, "MAYO" = 5, "JUNIO" = 6, 
+                   "JULIO" = 7, "AGOSTO" = 8, "SEPTIEMBRE" = 9, "OCTUBRE" = 10, "NOVIEMBRE" = 11, "DICIEMBRE" = 12)
+for (i in seq_along(dfList)) {
+
+  df <- dfList[[i]]
+  
+  df$mes <- monthMapping[df$mes]
+  
+  df$fecha <- paste0("1-", df$mes, "-", df$anio)
+  
+  # Crear una columna Fecha Solicitud la cual contendrá el Año, Mes y Hora de la solicitud
+  
+  df$fecha_solicitud <- as.POSIXct(strptime(paste(df$fecha, df$hora_solicitud), format = "%d-%m-%Y %H:%M:%S"))
+  
+  # Crear una columna Fecha Intervencion la cual contendrá el Año, Mes y Hora de la intervención. 
+  # Si la hora de intervención es más pequeña que la hora de solicitud es porque han pasado las 00:00 y habrá que añadir un día extra a la fecha
+  
+  df$fecha_intervencion <- as.POSIXct(strptime(paste(df$fecha, df$hora_intervencion), format = "%d-%m-%Y %H:%M:%S"))
+  df$fecha_intervencion <- ifelse(df$fecha_intervencion < df$fecha_solicitud, df$fecha_intervencion + days(1), df$fecha_intervencion)
+  df$fecha_intervencion <- as.POSIXct(df$fecha_intervencion, origin = "1970-01-01", tz = "Europe/Madrid")
+  
+  # Restar Fecha Solicitud y Fecha Intervencion para obtener los segundos que ha tardado el recurso en intervenir
+  
+  df$tiempo_intervencion <- ifelse(is.na(df$fecha_intervencion), NA, difftime(df$fecha_intervencion, df$fecha_solicitud, units = "secs"))
+
+  # Cambiar valores de la columna hospital para indicar posible hospitalización del paciente
+  df$hospital <- ifelse(is.na(df$fecha_intervencion), df$hospital, ifelse(is.na(df$hospital), 0, 1))
+
+  # Nos quedamos con las columnas que nos interesan
+  df <- df[, c("fecha_solicitud", "tiempo_intervencion", "codigo", "distrito", "hospital")]
+  
+  # Cambiar los nombres de los distritos para posteriormente que coincidan con el otro df
+  districtsNames <- c(
+    "ARGANZUELA" = "Arganzuela",
+    "BARAJAS" = "Barajas",
+    "CARABANCHEL" = "Carabanchel",
+    "CENTRO" = "Centro",
+    "CHAMARTIN" = "Chamartin",
+    "CHAMBERI" = "Chamberi",
+    "CIUDAD LINEAL" = "Ciudad Lineal",
+    "FUENCARRAL" = "Fuencarral",
+    "HORTALEZA" = "Hortaleza",
+    "LATINA" = "Latina",
+    "MONCLOA" = "Moncloa",
+    "MORATALAZ" = "Moratalaz",
+    "RETIRO" = "Retiro",
+    "SALAMANCA" = "Salamanca",
+    "SAN BLAS" = "San Blas",
+    "TETUAN" = "Tetuan",
+    "USERA" = "Usera",
+    "VALLECAS PTE." = "Puente de Vallecas",
+    "VICALVARO" = "Vicalvaro",
+    "VILLA DE VALLECAS" = "Villa de Vallecas",
+    "VILLAVERDE" = "Villaverde"
+  )
+  df <- df %>%
+  mutate(distrito = ifelse(distrito %in% names(districtsNames), districtsNames[distrito], distrito))
+
+  dfList[[i]] <- df  
+}
+```
+
+Combinamos todos los dataframes en uno.
+
+```{r}
+dfSamurProv <- do.call(rbind, dfList)
+head(dfSamurProv, 20)
+```
+
+El siguiente paso será agrupar toda la información relevante en cada uno de los distritos. He decidido quedarme con todos aquellos que tengan la columna distrito rellenada y sea uno de los 21 distritos oficiales del municipio. Todas aquellas activaciones que tengan otro valor asignado, como por ejemplo "CARRETERAS Y CIRCUNVALACIONES" o "LEGANES" no se utilizarán. El nuevo subdataframe que saldrá de aquí contendrá 21 registros con las siguientes columnas:
+
+- **distrito**: Nombre del distrito.
+
+- **media_inter**: Media del tiempo de intervención.
+
+- **acti_totales**: Número de activaciones totales registradas a ese distrito.
+
+- **acti_canceladas**: Ratio de activaciones canceladas en ese distrito en función de las activaciones totales del distrito.
+
+- **hospital**: Ratio de hospitalización en función de las activaciones realizadas.
+
+```{r message=FALSE, warning=FALSE, comment=FALSE}
+dfSamur <- dfSamurProv %>% filter(!is.na(distrito))
+
+districtsToRemove <- c("C.A.M.", "CARRETERAS Y CIRCUNVALACIONES", "LEGANES", "POZUELO", "FUERA TERMINO MUNICIPAL")
+dfSamur <- dfSamur %>%
+  filter(!distrito %in% districtsToRemove)
+
+dfSamur <- dfSamur %>%
+  group_by(distrito) %>%
+  summarize(
+    media_inter = mean(tiempo_intervencion, na.rm = TRUE),
+    acti_totales = n(),
+    acti_canceladas = sum(is.na(tiempo_intervencion)) / n(),
+    hospital = mean(as.numeric(hospital), na.rm=T)
+  )
+
+dfSamur
+```
+
+
+## 2.3. Manipulación del archivo de los distritos
+
+En este dataset nada más habrá que quedarse con las columnas de distrito, superficie en $km^2$ y la densidad de población. Como tarea adicional estandarizaré los nombres de los distritos para que coincidan con el dataframe del SAMUR. 
+
+``` {r}
+dfInfoDist <- read.csv("./data/info-distritos.csv", sep = ";", fileEncoding = "ISO-8859-1", header = TRUE)
+dfInfoDist <- select(dfInfoDist, -c("distrito_codigo", "municipio_codigo","municipio_nombre"))
+names(dfInfoDist) <- c("distrito", "superficie_km2", "densidad_pobl")
+
+districtsNames <- c(
+  "    Arganzuela " = "Arganzuela",
+  "    Barajas " = "Barajas",
+  "    Carabanchel " = "Carabanchel",
+  "    Centro " = "Centro",
+  "    Chamartín " = "Chamartin",
+  "    Chamberí " = "Chamberi",
+  "    Ciudad Lineal " = "Ciudad Lineal",
+  "    Fuencarral-El Pardo " = "Fuencarral",
+  "    Hortaleza " = "Hortaleza",
+  "    Latina " = "Latina",
+  "    Moncloa-Aravaca " = "Moncloa",
+  "    Moratalaz " = "Moratalaz",
+  "    Retiro " = "Retiro",
+  "    Salamanca " = "Salamanca",
+  "    San Blas-Canillejas " = "San Blas",
+  "    Tetuan " = "Tetuan",
+  "    Usera " = "Usera",
+  "    Puente de Vallecas " = "Puente de Vallecas",
+  "    Vicálvaro " = "Vicalvaro",
+  "    Villa de Vallecas " = "Villa de Vallecas",
+  "    Villaverde " = "Villaverde"
+)
+
+dfInfoDist <- dfInfoDist %>%
+  mutate(distrito = ifelse(distrito %in% names(districtsNames), districtsNames[distrito], distrito))
+
+dfInfoDist
+```
+
+## 2.4. Combinación de los dos dataframes
+
+Combinaremos los dataframes mergeando por la columna "distrito".
+
+```{r}
+dfFinalConDistritos <- merge(dfSamur, dfInfoDist, by = "distrito", all.x = TRUE)
+dfFinalConDistritos
+```
+
+# 3. Análisis de los datos
+Introducción a la sección
+
+```{r}
+dfFinal <- select(dfFinalConDistritos, -distrito)
+```
+
+
+```{r}
+summary(dfFinal)
+```
+Lo primero que podemos observar es la discrepancia entre escalas en el dataframe. No es lo mismo la escala de la columna del ratio de hospitalización que la escala de densidad de población. Esto será algo relevante a tener en cuenta a futuro cuadno realizemos el algoritmo de machine learning, ya que hay variables que pueden arrastar a otras.
+
+```{r}
+varianza = apply(X = dfFinal, MARGIN = 2, FUN = var)
+varianza
+```
+Las varianzas indican cosas realmente interesantes. En la media de tiempo que tarda el recurso en llegar a escena, la varianza es bastante alta, teniendo en cuenta que la media es 560 segundos y la varianza es 8611.892. En cambio, las varianzas de los ratios son bastante baja. No hay un distrito que predomine en hospitalizaciones o activaciones canceladas.
+
+
+```{r}
+cor(dfFinal)
+```
+```{r}
+plot(dfFinal)
+```
+
+Podemos observar algo que a priori parece contradictorio. Las activaciones totales y las activaciones canceladas no parecen moverse conjuntamente, ya que tienen una covarianza negativa. La densidad de población tampoco parece tener mucha relación con ninguna otra vairable, más que para el caso de la intervenciones totales y aun asi. Algo que me sorprende, por supuesto, es la densidad de población y la superficie. No parece que tengan ninguna relación.Tampoco parece tener mucha relación la media que tarda un recurso en llegar a la escena y la posible hospitalización del paciente.
+
+## 3.1. Preguntas de interés
+
+### 3.1.1 ¿Qué distrito tiene más intervenciones?
+El distrito con más intervenciones es el distrito Centro, estando muy por encima de cualquier otro distrito. Se puede deber a que es el distrito más turítico. Los distritos que menos intervenciones tiene son Vicálvaro, Moratalaz y Barajas.
+```{r}
+pieChart <- ggplot(dfFinalConDistritos, aes(x = "", y = acti_totales, fill = distrito, label = paste(distrito, "\n", acti_totales))) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start=0) +
+  geom_text(aes(label = paste(distrito, "\n", acti_totales)), position = position_stack(vjust = 0.5)) +
+  labs(title = "Intervenciones totales por distrito")
+pieChart
+```
+
+
+### 3.1.2 ¿Qué distrito tiene mayor media de tiempo de intervención? ¿Y menos?
+```{r}
+barplot <- ggplot(dfFinalConDistritos, aes(x = distrito, y = media_inter)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  labs(title = "Tiempo de Intervención por Distrito", y = "Tiempo de Intervención", x = "Distrito") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  # Rotamos los nombres del eje x
+
+barplot
+```
+Barajas parece ser el distrito en el que los recurso tardan más en intervenir. El resto de distritos no parece tener mucha diferencia entre ellos, no hay picos que destaquen.
+
+
+### 3.1.3 ¿Cual es el distrito con mayor superficie? ¿Cual es el distrito con mayor densidad de población?
+
+```{r}
+plotArea <- ggplot(dfFinalConDistritos, aes(x = distrito, y = superficie_km2)) +
+  geom_bar(stat = "identity", fill = "blue", alpha = 0.5) +
+  labs(title = "Superficie por Distrito", y = "Superficie (km2)", x = "Distrito") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  # Rotamos los nombres del eje x
+
+
+plotDensity <- ggplot(dfFinalConDistritos, aes(x = distrito, y = densidad_pobl)) +
+  geom_bar(stat = "identity", fill = "red", alpha = 0.5) +
+  labs(title = "Densidad de Población por Distrito", y = "Densidad de Población", x = "Distrito") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  # Rotamos los nombres del eje x
+
+
+grid.arrange(plotArea, plotDensity, ncol = 2)
+```
+Podemos observar que el distrito Fuencarral se lleva el premio a distrito más grande, ya que abarca toda la superficie de El Pardo (nombre oficial del distrito: Fuencarral - El Pardo). La densidad de población isn embargo, podríamos decir que es un poco más competitiva. Sigue habiendo muchas diferencias entre distritos, como Barajas y Ciudad Lineal, pero ya no hay un distrito que destaca por encima del resto.
+
+Algo que quizá si puede llegar a destacar es, que aunque el distrito Centro es el que más intervenciones tiene por mucho, no es está ni de lejos entre los tres primeros en densidad de población. Es por esto que pienso que se puede deber a la cantidad de oferte de ocio y turismo que ofrece y que atrae a mucha gente de fuera de la zona.
+
+### 3.1.5 ¿Cual es el distrito con mayor ratio de hospitalización? ¿Hay mucha diferencia entre el resto de distritos?
+ 
+```{r}
+dfFinalConDistritos[order(-dfFinalConDistritos$hospital), ]
+```
+El distrito con mayor ratio de hospitalizacion es Villa de Vallecas y el que menos sería, el distrito Centro. Sin embargo, tampoco hay una diferencia muy grande entre Villa de Vallecas y el resto, todos oscilan entre el 30 y 40 porciento de activaciones canceladas.
+
+### 3.1.6 ¿Cual es el distrito con mayor ratio de intervenciones canceladas? ¿Hay mucha diferencia entre el resto de distritos?
+
+```{r}
+dfFinalConDistritos[order(-dfFinalConDistritos$acti_canceladas), ]
+```
+El distrito con mayor ratio de cancelación sería el distrito de Barajas. Como podemos observar, tampoco hay mucha diferencia entre este distrito y el resto de locaclizaciones, al igual que ocurre con la hospitalización.
+
+
+# 4. Análisis de Componentes Principales (PCA)
+Análisis de Componentes Principales (de ahora en adelante PCA por sus siglas en inglés) es una técnica de reducción de dimensionalidad. Su objetivo es simplificar conjuntos de datos complejos conservando la mayor cantidad posible de información. PCA coge un conjunto de datos con muchas características y variables y las transforma en un nuevo conjunto de variables llamads componentes principales, ordenados en función de la cantidad de varianza que explican.
+
+En este caso, aplicaré PCA para ver si puedo reducir el número de columnas que nos encontramos a unos pocos componentes guardando la mayor inforamción posible.
+
+Antes de meternos en el proceso de PCA, es importante tener en cuenta que los datos están en escalas altamente diferentes, y esto podría llevar a casos como que una variable con mayor varianza arrastre al resto. Para tratar esto voy a tipificar los datos para asegurarme de que las variables tengan la misma escala y distribución.
+
+```{r}
+dfFinal <- dfFinal %>% mutate(across(where(is.numeric), scale))
+dfFinal
+```
+
+
+
+```{r}
+pca = prcomp(dfFinal, center = TRUE, scale = TRUE)
+pca$rotation
+```
+
+
+```{r}
+summary(pca)
+```
+Como vemos, los tres primeros componentes explican por sí mismos el 87% de la variabilidad.
+
+
+```{r}
+plot(pca, type = "l", main="Varianza por número de componentes")
+```
+
+
+```{r}
+biplot(x = pca, scale = 0, cex = 0.9, col = c("grey", "blue"))
+```
+
+LEYENDA DE DISTRITOS
+
+1. Arganzuela
+2. Barajas
+3. Carabanchel
+4. Centro
+5. Chamartín
+6. Chamberí
+7. Ciudad Lineal
+8. Fuencarral
+9. Hortaleza
+10. Latina
+11. Moncloa
+12. Moratalaz
+13. Puente de Vallecas
+14. Retiro
+15. Salamanca
+16. San Blas
+17. Tetuan
+18. Usera
+19. Vicálvaro
+20. Villa de Vallecas
+21. Villaverde
+
+Observaciones del gráfico de PCA:
+- Los distritos no se concentran en un centro, están un poco dispersos, aunque es cierto que tienden a agruparse unos pocos en el centro de las flejas. 
+
+- El distrito 4 es uno de los más alejados. Corresponde al distrito Centro y como ya he comentado antes, es el que más activaciones tiene registradas y puede ser motivo por el que esté tirando en esa dirección.
+
+- El distrito 2 es otro de los que están bastantes dispersos. Corresponde al distrito de Barajas. Antes hemos visto que es el distrito que más ratio de cancelación de activaciones tiene y uno de los que menos densidad de población tiene también.
+
+- El distrito 8 corresponde a Fuencarral, el distrito con mayor superficie por kilómetro cuadrado. 
+
+- Distritos Vicálvaro, Villa de Vallecas y Villaverde (19, 20 y 21 respectivamente) están en un grupo juntos abajo a la derecha. Si recordamos, corresponden a los tres primeros con mayor ratio de hospitalización en todo el municipio y tiene sentido que sigan esa tendencia en el gráfico.
+
+- Distritos 12 (Moratalaz) y 14 (Retiro) no se quedan atrás en el ratio de hospitalización, pero destacan más, sobre todo por el distrito Retiro, por su densidad de población.
