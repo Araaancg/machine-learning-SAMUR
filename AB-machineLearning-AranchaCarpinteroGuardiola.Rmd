@@ -1,4 +1,4 @@
----
+f---
 title: "Assigment Brief Machine Learning - Arancha Carpintero Guardiola"
 output:
   pdf_document:
@@ -547,3 +547,139 @@ theme_bw() +
 theme(legend.position = "none")
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+# PARTE 2 - ANÁLISIS CLUSTER POR TIPO DE ACTIVACIÓN
+
+```{r}
+dfSamurProv
+```
+
+```{r}
+dfCode <- dfSamurProv %>% filter(!is.na(codigo)) %>% filter(codigo != "Pacientes en RCP prolongada")
+
+dfCode$noche <- ifelse(hour(dfCode$fecha_solicitud) >= 9 & hour(dfCode$fecha_solicitud) < 21, 1, 0)
+
+dfCode <- dfCode %>%
+  group_by(codigo) %>%
+  summarize(
+    media_inter = mean(tiempo_intervencion, na.rm = TRUE),
+    acti_totales = n(),
+    acti_canceladas = sum(is.na(tiempo_intervencion)) / n(),
+    noche = sum(is.na(noche)) / n(),
+    hospital = mean(as.numeric(hospital), na.rm=T)
+  )
+
+dfCode
+```
+
+
+```{r}
+dfFinal2 <- dfCode %>% mutate(across(where(is.numeric), scale))
+codes <- dfFinal2$codigo
+dfFinal2 <- select(dfFinal2, -codigo)
+dfFinal2
+```
+pca
+
+```{r}
+rownames(dfFinal2) <- codes
+pca2 <- prcomp(dfFinal2, center = TRUE, scale = TRUE)
+pca2$rotation
+```
+
+
+```{r}
+summary(pca2)
+```
+
+```{r}
+plot(pca2, type = "l", main="Varianza por número de componentes")
+```
+
+
+```{r}
+biplot(x = pca2, scale = 0, cex = 0.9, col = c("grey", "blue"))
+```
+
+analisis cluster
+
+```{r}
+pcs2 <- pca2$x[, 1:3]
+```
+
+
+
+```{r}
+data_k <- pcs2 
+#Maximum number of clusters to test (sqrt(number of observations))
+#sqrt(number_of_rows)
+k_max <- as.integer(10)
+ 
+# Create an empty vector to store the within-cluster sum of squares (wss)
+wss <- numeric(k_max)
+
+# Loop through different k values and calculate wss
+for (k in 1:k_max) {
+  # Perform k-means clustering with "k" clusters and set random seeds for reproducibility
+  set.seed(123)  # Replace 123 with any integer for different random starting points
+  kmeans_fit <- kmeans(data_k, centers = k, nstart = 50)
+  
+  # Extract the within-cluster sum of squares
+  wss[k] <- kmeans_fit$tot.withinss
+}
+```
+
+```{r}
+plot(1:k_max, wss, type = "b", main = "Elbow Method")
+```
+
+```{r}
+#calculate gap statistic based on number of clusters
+gap_stat <- clusGap(pcs2,
+                    FUN = pam,
+                    K.max = 10, #max clusters to consider
+                    B = 50) #total bootstrapped iterations
+```
+
+```{r}
+fviz_gap_stat(gap_stat)
+```
+
+
+```{r}
+kmeansModel <- kmeans(pcs2, centers = 3, nstart = 20)
+```
+
+```{r}
+resultCluster <- cbind(cluster = kmeansModel$cluster, pcs2)
+ 
+fviz_cluster(kmeansModel, data = resultCluster, repel = TRUE, ggtheme = theme_bw())
+```
+
+```{r}
+km_clusters<- eclust(x = pcs2, FUNcluster = "kmeans", k = 3, seed = 123,
+  hc_metric = "euclidean", nstart = 50, graph = FALSE) 
+
+fviz_silhouette(sil.obj = km_clusters, print.summary = TRUE, palette = "jco",
+ggtheme = theme_classic())
+```
+
+```{r}
+pam_clusters <- pam(x = dfFinal2, k = 3, metric = "manhattan")
+
+fviz_cluster(object = pam_clusters, data = df_toKmeans, ellipse.type = "t",
+  repel = TRUE) +
+theme_bw() +
+theme(legend.position = "none")
+```
