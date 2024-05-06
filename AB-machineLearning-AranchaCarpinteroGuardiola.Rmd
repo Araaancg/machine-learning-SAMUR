@@ -1,15 +1,13 @@
-f---
-title: "Assigment Brief Machine Learning - Arancha Carpintero Guardiola"
+---
+title: "Assigment Brief Machine Learning"
+author: "Arancha Carpintero Guardiola"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
-  pdf_document:
-    toc: true
-    toc_depth: '6'
   html_notebook:
     theme: flatly
     toc: true
     toc_float: true
     toc_depth: 6
-date: "`r format(Sys.time(), '%d %B, %Y')`"
 ---
 Este proyecto tiene como objetivo implementar uno o más algoritmos the machine learning a una serie de datos y sacar ciertas conclusiones.
 
@@ -30,7 +28,7 @@ library(factoextra)
 # 1. Presentación de los datos
 Para hacer posible este proyecto se han recopilado un total de 8 archivos csv. 7 archivos son correspondientes a las activaciones del SAMUR y Protección Civil entre los años 2017 y 2023 (un archivo por año) y el último contiene información sobre los diferentes distritos del municipio de Madrid. Ambos archivos han sido conseguidos de los portales abiertos del Ayuntamiento y Comunidad de Madrid respectivamente. Para más información, consultar las referencias.
 
-## 1.2 - CSV de las Activaciones del SAMUR y Protección Civil
+## 1.1 - CSV de las Activaciones del SAMUR y Protección Civil
 Entre los 7 archivos disponible contamos con poco menos de 1 millón de registros. 
 
 Para que nos entendamos mejor, una activación la define el proveedor de los datos como "encargos de asistencia sanitaria que supone la activación de un recurso sanitario u otro tipo de vehículo" 
@@ -63,7 +61,7 @@ Es importante destacar las siguientes observaciones (descritas por el proveedor 
 
 - Un paciente puede no requerir asistencia hospitalaria y en ese caso se dejaría el campo hospital vacío.
 
-## 1.3 - CSV con la información de los distritos del municipio de Madrid
+## 1.2 - CSV con la información de los distritos del municipio de Madrid
 Se trata de un csv pequeño, de apenas 21 filas, con información sobre los distintos distritos del municipio de Madrid. Estos serán los distritos con los que trabajaré a lo largo del proyecto. 
 
 Los distritos son: Arganzuela, Barajas, Carabanchel, Centro, Chamartín, Chamberí, Ciudad Lineal, Fuencarral, Hortaleza, Latina, Moncloa, Moratalaz, Puente de Vallecas, Retiro, Salamanca, San Blas, Tetuan, Usera, Vicálvaro, Villa de Vallecas y Villaverde.
@@ -82,8 +80,8 @@ El CSV contieen las siguientes columnas:
 
 - **densidad_por_km2**: Densidad de población por kilómetro cuadrado del distrito
 
-# 2. Manipulación de los datos
-En esta sección voy a presentar todo el proceso que he realizado de transformación y limpieza de datos. Me ha parecido conveniente realizar una lista con todos los puntos que debe cubrir esta manipulación, ya que disponemos de muchos archivos con muchos datos "en sucio" que hay que trabajar. Los puntos de los que hablo son:
+# 2. Transformación de los datos
+En esta sección voy a presentar todo el proceso que he realizado de transformación de los archivos csv para convertirlos en algo con lo que se pueda trabajar. Los puntos clave de esta transformación son:
 
 - Averiguar la codificación de los archivos para no tener problemas al leer los csv en R.
 
@@ -100,37 +98,7 @@ En esta sección voy a presentar todo el proceso que he realizado de transformac
 ## 2.1. Codificación de los archivos
 Para esta parte he realizado una función de Python muy simple que me ha servido para averiguar la codificación de los archivos. Se trata de una función que recursivamente se introduce en la carpeta "data" (donde están todos mis csv) y me imprime la codificación de cada uno de los archivos que hay dentro.
 
-```{python}
-import os
-import chardet
 
-def detectEncoding(filePath): 
-    with open(filePath, 'rb') as file: 
-        detector = chardet.universaldetector.UniversalDetector() 
-        for line in file: 
-            detector.feed(line) 
-            if detector.done: 
-                break
-        detector.close() 
-    return detector.result['encoding'] 
-
-def getAllFilesWithEncoding(directory):
-    filesWithEncoding = []
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            filePath = os.path.join(root, file)
-            encoding = detectEncoding(filePath)
-            filesWithEncoding.append((filePath, encoding))
-    return filesWithEncoding
-
-csvDirectory = './data'
-filesWithEncoding = getAllFilesWithEncoding(csvDirectory)
-
-for file, encoding in filesWithEncoding:
-    name = os.path.basename(file)
-    print(f'The encoding of the file {name} is: {encoding}')
-```
-```{bash}
 The encoding of the file info-distritos.csv is: ISO-8859-1
 The encoding of the file samur-2017.csv is: ISO-8859-1
 The encoding of the file samur-2018.csv is: ISO-8859-1
@@ -139,11 +107,13 @@ The encoding of the file samur-2020.csv is: UTF-8-SIG
 The encoding of the file samur-2021.csv is: UTF-8-SIG
 The encoding of the file samur-2022.csv is: UTF-8-SIG
 The encoding of the file samur-2023.csv is: UTF-8-SIG
-```
-Sorprendentemente, los archivos del SAMUR no son homogéneos en cuanto a codificación, y será importante tenerlo en cuenta a la hora de leer los csv en R.
 
-## 2.2. Manipulación de los archivos del SAMUR
-El primer paso será leer los 7 archivos en 7 dataframes diferentes para posteriormente combinarlos todos en uno solo. En mi caso los meteré todos en una lista para ir manipulandolos poco a poco. De primeras ya he decidido que todos las celdas cuyo valor sea un espacio o estén vacías serán tratadas como NA. Además, ya aprovecho para asignar nuevos nombres a las columnas.
+Sorprendentemente, los archivos del SAMUR no son homogéneos en cuanto a codificación, y será importante tenerlo en cuenta a la hora de leer los CSV en R.
+
+## 2.2. Transformación de los archivos del SAMUR
+A la hora de leer todos los archivos en R he decidido transformarlos en dataframes y meterlos todos en una lista para que con un simple bucle se puedan tranformar todos a la vez, aprovechando que siguen la misma estructura. De primeras ya he decidido que todos las celdas cuyo valor sea un espacio o estén vacías serán tratadas como NA. Además, ya aprovecho para asignar nuevos nombres a las columnas.
+
+Esta transformación solo cubrirá lo básico de los datos. Luego, dependiendo del algoritmo que emplee agruparé de una forma y modificaré algunas columnas (ver puntos 3.1 y 4.1)
 
 ```{r}
 csvNames <- list.files(path = "./data/samur", pattern = "\\.csv$", full.names = TRUE)
@@ -227,50 +197,18 @@ for (i in seq_along(dfList)) {
 Combinamos todos los dataframes en uno.
 
 ```{r}
-dfSamurProv <- do.call(rbind, dfList)
-head(dfSamurProv, 20)
+dfSamurTotal <- do.call(rbind, dfList)
+head(dfSamurTotal, 20)
 ```
 
-El siguiente paso será agrupar toda la información relevante en cada uno de los distritos. He decidido quedarme con todos aquellos que tengan la columna distrito rellenada y sea uno de los 21 distritos oficiales del municipio. Todas aquellas activaciones que tengan otro valor asignado, como por ejemplo "CARRETERAS Y CIRCUNVALACIONES" o "LEGANES" no se utilizarán. El nuevo subdataframe que saldrá de aquí contendrá 21 registros con las siguientes columnas:
-
-- **distrito**: Nombre del distrito.
-
-- **media_inter**: Media del tiempo de intervención.
-
-- **acti_totales**: Número de activaciones totales registradas a ese distrito.
-
-- **acti_canceladas**: Ratio de activaciones canceladas en ese distrito en función de las activaciones totales del distrito.
-
-- **hospital**: Ratio de hospitalización en función de las activaciones realizadas.
-
-```{r message=FALSE, warning=FALSE, comment=FALSE}
-dfSamur <- dfSamurProv %>% filter(!is.na(distrito))
-
-districtsToRemove <- c("C.A.M.", "CARRETERAS Y CIRCUNVALACIONES", "LEGANES", "POZUELO", "FUERA TERMINO MUNICIPAL")
-dfSamur <- dfSamur %>%
-  filter(!distrito %in% districtsToRemove)
-
-dfSamur <- dfSamur %>%
-  group_by(distrito) %>%
-  summarize(
-    media_inter = mean(tiempo_intervencion, na.rm = TRUE),
-    acti_totales = n(),
-    acti_canceladas = sum(is.na(tiempo_intervencion)) / n(),
-    hospital = mean(as.numeric(hospital), na.rm=T)
-  )
-
-dfSamur
-```
-
-
-## 2.3. Manipulación del archivo de los distritos
+## 2.3. Transformación del archivo de los distritos
 
 En este dataset nada más habrá que quedarse con las columnas de distrito, superficie en $km^2$ y la densidad de población. Como tarea adicional estandarizaré los nombres de los distritos para que coincidan con el dataframe del SAMUR. 
 
 ``` {r}
-dfInfoDist <- read.csv("./data/info-distritos.csv", sep = ";", fileEncoding = "ISO-8859-1", header = TRUE)
-dfInfoDist <- select(dfInfoDist, -c("distrito_codigo", "municipio_codigo","municipio_nombre"))
-names(dfInfoDist) <- c("distrito", "superficie_km2", "densidad_pobl")
+dfInfoDistritos <- read.csv("./data/info-distritos.csv", sep = ";", fileEncoding = "ISO-8859-1", header = TRUE)
+dfInfoDistritos <- select(dfInfoDistritos, -c("distrito_codigo", "municipio_codigo","municipio_nombre"))
+names(dfInfoDistritos) <- c("distrito", "superficie_km2", "densidad_pobl")
 
 districtsNames <- c(
   "    Arganzuela " = "Arganzuela",
@@ -296,56 +234,85 @@ districtsNames <- c(
   "    Villaverde " = "Villaverde"
 )
 
-dfInfoDist <- dfInfoDist %>%
+dfInfoDistritos <- dfInfoDistritos %>%
   mutate(distrito = ifelse(distrito %in% names(districtsNames), districtsNames[distrito], distrito))
 
-dfInfoDist
-```
-
-## 2.4. Combinación de los dos dataframes
-
-Combinaremos los dataframes mergeando por la columna "distrito".
-
-```{r}
-dfFinalConDistritos <- merge(dfSamur, dfInfoDist, by = "distrito", all.x = TRUE)
-dfFinalConDistritos
-```
-
-# 3. Análisis de los datos
-Introducción a la sección
-
-```{r}
-dfFinal <- select(dfFinalConDistritos, -distrito)
+dfInfoDistritos
 ```
 
 
+# 3. Prueba 1 - Datos agrupados por distritos
+En esta parte voy a exponer un Análisis de Componentes Principales y un Análisis Cluster de los datos agrupados por distritos. Para ello voy a crear un nuevo dataframe recogiendo toda la información relevante de los distritos. El nuevo dataframe tendrá las siguientes columnas:
+
+- **distrito**: Nombre del distrito.
+
+- **media_inter**: Media del tiempo de intervención.
+
+- **acti_totales**: Número de activaciones totales registradas a ese distrito.
+
+- **acti_canceladas**: Ratio de activaciones canceladas en ese distrito en función de las activaciones totales del distrito.
+
+- **hospital**: Ratio de hospitalización en función de las activaciones realizadas.
+
+He decidido quedarme con todos aquellos que tengan la columna distrito rellenada y sea uno de los 21 distritos oficiales del municipio. Todas aquellas activaciones que tengan otro valor asignado, como por ejemplo "CARRETERAS Y CIRCUNVALACIONES" o "LEGANES" no se utilizarán. También lo voy a juntar con el dataframe que contiene la información básica de los distritos.
+
+```{r message=FALSE, warning=FALSE, comment=FALSE}
+dfSamurPorDistrito <- dfSamurTotal %>% filter(!is.na(distrito))
+
+districtsToRemove <- c("C.A.M.", "CARRETERAS Y CIRCUNVALACIONES", "LEGANES", "POZUELO", "FUERA TERMINO MUNICIPAL")
+dfSamurPorDistrito <- dfSamurPorDistrito %>%
+  filter(!distrito %in% districtsToRemove)
+
+dfSamurPorDistrito <- dfSamurPorDistrito %>%
+  group_by(distrito) %>%
+  summarize(
+    media_inter = mean(tiempo_intervencion, na.rm = TRUE),
+    acti_totales = n(),
+    acti_canceladas = sum(is.na(tiempo_intervencion)) / n(),
+    hospital = mean(as.numeric(hospital), na.rm=T)
+  )
+
+dfPrueba1ConNombres <- merge(dfSamurPorDistrito, dfInfoDistritos, by = "distrito", all.x = TRUE)
+dfPrueba1ConNombres
+```
+
 ```{r}
-summary(dfFinal)
+nombresPrueba1 <- dfPrueba1ConNombres$distrito
+dfPrueba1 <- select(dfPrueba1ConNombres, -distrito)
+dfPrueba1
+```
+
+## 3.1 Análisis de los datos
+
+```{r}
+summary(dfPrueba1)
 ```
 Lo primero que podemos observar es la discrepancia entre escalas en el dataframe. No es lo mismo la escala de la columna del ratio de hospitalización que la escala de densidad de población. Esto será algo relevante a tener en cuenta a futuro cuadno realizemos el algoritmo de machine learning, ya que hay variables que pueden arrastar a otras.
 
+
 ```{r}
-varianza = apply(X = dfFinal, MARGIN = 2, FUN = var)
+varianza = apply(X = dfPrueba1, MARGIN = 2, FUN = var)
 varianza
 ```
 Las varianzas indican cosas realmente interesantes. En la media de tiempo que tarda el recurso en llegar a escena, la varianza es bastante alta, teniendo en cuenta que la media es 560 segundos y la varianza es 8611.892. En cambio, las varianzas de los ratios son bastante baja. No hay un distrito que predomine en hospitalizaciones o activaciones canceladas.
 
 
 ```{r}
-cor(dfFinal)
+cor(dfPrueba1)
 ```
+
 ```{r}
-plot(dfFinal)
+plot(dfPrueba1)
 ```
 
 Podemos observar algo que a priori parece contradictorio. Las activaciones totales y las activaciones canceladas no parecen moverse conjuntamente, ya que tienen una covarianza negativa. La densidad de población tampoco parece tener mucha relación con ninguna otra vairable, más que para el caso de la intervenciones totales y aun asi. Algo que me sorprende, por supuesto, es la densidad de población y la superficie. No parece que tengan ninguna relación.Tampoco parece tener mucha relación la media que tarda un recurso en llegar a la escena y la posible hospitalización del paciente.
 
-## 3.1. Preguntas de interés
+### 3.1.1 Preguntas de interés
 
-### 3.1.1 ¿Qué distrito tiene más intervenciones?
+#### ¿Qué distrito tiene más intervenciones? ¿Y menos?
 El distrito con más intervenciones es el distrito Centro, estando muy por encima de cualquier otro distrito. Se puede deber a que es el distrito más turítico. Los distritos que menos intervenciones tiene son Vicálvaro, Moratalaz y Barajas.
 ```{r}
-pieChart <- ggplot(dfFinalConDistritos, aes(x = "", y = acti_totales, fill = distrito, label = paste(distrito, "\n", acti_totales))) +
+pieChart <- ggplot(dfPrueba1ConNombres, aes(x = "", y = acti_totales, fill = distrito, label = paste(distrito, "\n", acti_totales))) +
   geom_bar(stat = "identity") +
   coord_polar("y", start=0) +
   geom_text(aes(label = paste(distrito, "\n", acti_totales)), position = position_stack(vjust = 0.5)) +
@@ -354,9 +321,9 @@ pieChart
 ```
 
 
-### 3.1.2 ¿Qué distrito tiene mayor media de tiempo de intervención? ¿Y menos?
+#### ¿Qué distrito tiene mayor media de tiempo de intervención? ¿Y menos?
 ```{r}
-barplot <- ggplot(dfFinalConDistritos, aes(x = distrito, y = media_inter)) +
+barplot <- ggplot(dfPrueba1ConNombres, aes(x = distrito, y = media_inter)) +
   geom_bar(stat = "identity", fill = "lightblue") +
   labs(title = "Tiempo de Intervención por Distrito", y = "Tiempo de Intervención", x = "Distrito") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  # Rotamos los nombres del eje x
@@ -366,16 +333,16 @@ barplot
 Barajas parece ser el distrito en el que los recurso tardan más en intervenir. El resto de distritos no parece tener mucha diferencia entre ellos, no hay picos que destaquen.
 
 
-### 3.1.3 ¿Cual es el distrito con mayor superficie? ¿Cual es el distrito con mayor densidad de población?
+#### ¿Cual es el distrito con mayor superficie? ¿Y menos? ¿Cual es el distrito con mayor densidad de población? ¿Y menos?
 
 ```{r}
-plotArea <- ggplot(dfFinalConDistritos, aes(x = distrito, y = superficie_km2)) +
+plotArea <- ggplot(dfPrueba1ConNombres, aes(x = distrito, y = superficie_km2)) +
   geom_bar(stat = "identity", fill = "blue", alpha = 0.5) +
   labs(title = "Superficie por Distrito", y = "Superficie (km2)", x = "Distrito") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  # Rotamos los nombres del eje x
 
 
-plotDensity <- ggplot(dfFinalConDistritos, aes(x = distrito, y = densidad_pobl)) +
+plotDensity <- ggplot(dfPrueba1ConNombres, aes(x = distrito, y = densidad_pobl)) +
   geom_bar(stat = "identity", fill = "red", alpha = 0.5) +
   labs(title = "Densidad de Población por Distrito", y = "Densidad de Población", x = "Distrito") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  # Rotamos los nombres del eje x
@@ -387,22 +354,22 @@ Podemos observar que el distrito Fuencarral se lleva el premio a distrito más g
 
 Algo que quizá si puede llegar a destacar es, que aunque el distrito Centro es el que más intervenciones tiene por mucho, no es está ni de lejos entre los tres primeros en densidad de población. Es por esto que pienso que se puede deber a la cantidad de oferte de ocio y turismo que ofrece y que atrae a mucha gente de fuera de la zona.
 
-### 3.1.5 ¿Cual es el distrito con mayor ratio de hospitalización? ¿Hay mucha diferencia entre el resto de distritos?
+#### ¿Cual es el distrito con mayor ratio de hospitalización? ¿Y menos? ¿Hay mucha diferencia entre el resto de distritos? ¿Y menos?
  
 ```{r}
-dfFinalConDistritos[order(-dfFinalConDistritos$hospital), ]
+dfPrueba1ConNombres[order(-dfPrueba1ConNombres$hospital), ]
 ```
 El distrito con mayor ratio de hospitalizacion es Villa de Vallecas y el que menos sería, el distrito Centro. Sin embargo, tampoco hay una diferencia muy grande entre Villa de Vallecas y el resto, todos oscilan entre el 30 y 40 porciento de activaciones canceladas.
 
-### 3.1.6 ¿Cual es el distrito con mayor ratio de intervenciones canceladas? ¿Hay mucha diferencia entre el resto de distritos?
+#### ¿Cual es el distrito con mayor ratio de intervenciones canceladas? ¿Y menos? ¿Hay mucha diferencia entre el resto de distritos?
 
 ```{r}
-dfFinalConDistritos[order(-dfFinalConDistritos$acti_canceladas), ]
+dfPrueba1ConNombres[order(-dfPrueba1ConNombres$acti_canceladas), ]
 ```
 El distrito con mayor ratio de cancelación sería el distrito de Barajas. Como podemos observar, tampoco hay mucha diferencia entre este distrito y el resto de locaclizaciones, al igual que ocurre con la hospitalización.
 
 
-# 4. Análisis de Componentes Principales (PCA)
+## 3.2. Análisis de Componentes Principales (PCA)
 Análisis de Componentes Principales (de ahora en adelante PCA por sus siglas en inglés) es una técnica de reducción de dimensionalidad. Su objetivo es simplificar conjuntos de datos complejos conservando la mayor cantidad posible de información. PCA coge un conjunto de datos con muchas características y variables y las transforma en un nuevo conjunto de variables llamads componentes principales, ordenados en función de la cantidad de varianza que explican.
 
 En este caso, aplicaré PCA para ver si puedo reducir el número de columnas que nos encontramos a unos pocos componentes guardando la mayor inforamción posible.
@@ -410,167 +377,119 @@ En este caso, aplicaré PCA para ver si puedo reducir el número de columnas que
 Antes de meternos en el proceso de PCA, es importante tener en cuenta que los datos están en escalas altamente diferentes, y esto podría llevar a casos como que una variable con mayor varianza arrastre al resto. Para tratar esto voy a tipificar los datos para asegurarme de que las variables tengan la misma escala y distribución.
 
 ```{r}
-dfFinal <- dfFinal %>% mutate(across(where(is.numeric), scale))
-dfFinal
+dfPrueba1 <- dfPrueba1 %>% mutate(across(where(is.numeric), scale))
+dfPrueba1
 ```
 
-
-
 ```{r}
-rownames(dfFinal) <- dfFinalConDistritos$distrito
-pca = prcomp(dfFinal, center = TRUE, scale = TRUE)
-pca$rotation
+rownames(dfPrueba1) <- nombresPrueba1
+pca1 = prcomp(dfPrueba1, center = TRUE, scale = TRUE)
+pca1$rotation
 ```
 
-
 ```{r}
-summary(pca)
+summary(pca1)
 ```
 Como vemos, los tres primeros componentes explican por sí mismos el 87% de la variabilidad.
 
 
 ```{r}
-plot(pca, type = "l", main="Varianza por número de componentes")
+plot(pca1, type = "l", main="Varianza por número de componentes")
 ```
 
 
 ```{r}
-biplot(x = pca, scale = 0, cex = 0.9, col = c("grey", "blue"))
+biplot(x = pca1, scale = 0, cex = 0.9, col = c("grey", "lightgreen"))
 ```
-
-LEYENDA DE DISTRITOS
-
-1. Arganzuela
-2. Barajas
-3. Carabanchel
-4. Centro
-5. Chamartín
-6. Chamberí
-7. Ciudad Lineal
-8. Fuencarral
-9. Hortaleza
-10. Latina
-11. Moncloa
-12. Moratalaz
-13. Puente de Vallecas
-14. Retiro
-15. Salamanca
-16. San Blas
-17. Tetuan
-18. Usera
-19. Vicálvaro
-20. Villa de Vallecas
-21. Villaverde
-
 Observaciones del gráfico de PCA:
 - Los distritos no se concentran en un centro, están un poco dispersos, aunque es cierto que tienden a agruparse unos pocos en el centro de las flejas. 
 
-- El distrito 4 es uno de los más alejados. Corresponde al distrito Centro y como ya he comentado antes, es el que más activaciones tiene registradas y puede ser motivo por el que esté tirando en esa dirección.
+- El distrito Centro es uno de los más alejados. Como ya he comentado antes, es el que más activaciones tiene registradas y puede ser motivo por el que esté tirando en esa dirección.
 
-- El distrito 2 es otro de los que están bastantes dispersos. Corresponde al distrito de Barajas. Antes hemos visto que es el distrito que más ratio de cancelación de activaciones tiene y uno de los que menos densidad de población tiene también.
+- El distrito de Barajas es otro de los que están bastantes dispersos. Antes hemos visto que es el distrito que más ratio de cancelación de activaciones tiene y uno de los que menos densidad de población tiene también.
 
-- El distrito 8 corresponde a Fuencarral, el distrito con mayor superficie por kilómetro cuadrado. 
+- El distrito Fuencarral está muy a la derecha, tirando fuertemente de la flecha de superficie. Tiene sentido, al ser el distrito con mayor superficie por kilómetro cuadrado. 
 
-- Distritos Vicálvaro, Villa de Vallecas y Villaverde (19, 20 y 21 respectivamente) están en un grupo juntos abajo a la derecha. Si recordamos, corresponden a los tres primeros con mayor ratio de hospitalización en todo el municipio y tiene sentido que sigan esa tendencia en el gráfico.
+- Distritos Vicálvaro, Villa de Vallecas y Villaverde están en un grupo juntos abajo a la derecha. Si recordamos, corresponden a los tres primeros con mayor ratio de hospitalización en todo el municipio y tiene sentido que sigan esa tendencia en el gráfico.
 
-- Distritos 12 (Moratalaz) y 14 (Retiro) no se quedan atrás en el ratio de hospitalización, pero destacan más, sobre todo por el distrito Retiro, por su densidad de población.
+- Distritos Moratalaz y Retiro no se quedan atrás en el ratio de hospitalización, pero destacan más, sobre todo por el distrito Retiro, por su densidad de población.
 
 
-# Análisis Cluster
+## 3.3 Análisis Cluster
+Visto lo visto en PCA, me quedo con los 3 primeros componentes, conteniendo un 87% de la variabilidad de los datos.
 
 ```{r}
-pcs <- pca$x[, 1:3]
+pcs1 <- pca1$x[, 1:3]
 ```
 
+El análisis cluster que voy a aplicar primero será el K-Means. K-Means es un algoritmo de agrupamiento de datos en diferentes clusters. Funciona iterativamente asignando puntos de datos al centroide más cercano y actualizando los centroides para minimizar la suma de las distancias cuadradas dentro de cada cluster. Es sensible a los valores atípicos y la elección de los centroides iniciales, y típicamente utiliza la métrica de distancia euclidiana para el agrupamiento. 
 
+La K es un número que representa en cuántos clusters queremos dividir los datos. Para estimar mejor cuántos deberíamos utilizar, voy a aplicar el "Elbow Method", en donde se realiza el K-means para diferentes valores de K y se grafica la suma de las distancias cuadradas dentro de cada cluster en función de K. En el gráfico resultante, se busca el "codo" o punto de inflexión donde la disminución de la suma de las distancias se vuelve menos pronunciada. Este punto suele indicar el número óptimo de clusters para el conjunto de datos dado.
 
 ```{r}
-data_k <- pcs 
-#Maximum number of clusters to test (sqrt(number of observations))
-#sqrt(number_of_rows)
-k_max <- as.integer(10)
- 
-# Create an empty vector to store the within-cluster sum of squares (wss)
-wss <- numeric(k_max)
+dataK <- pcs1 
 
-# Loop through different k values and calculate wss
-for (k in 1:k_max) {
-  # Perform k-means clustering with "k" clusters and set random seeds for reproducibility
-  set.seed(123)  # Replace 123 with any integer for different random starting points
-  kmeans_fit <- kmeans(data_k, centers = k, nstart = 50)
+maxK <- as.integer(10)
+ 
+wss <- numeric(maxK)
+
+for (k in 1:maxK) {
+  set.seed(123)  
   
-  # Extract the within-cluster sum of squares
+  kmeans_fit <- kmeans(dataK, centers = k, nstart = 50)
+  
   wss[k] <- kmeans_fit$tot.withinss
 }
+
+plot(1:maxK, wss, type = "b", main = "Elbow Method")
 ```
 
 ```{r}
-plot(1:k_max, wss, type = "b", main = "Elbow Method")
-```
-
-```{r}
-#calculate gap statistic based on number of clusters
-gap_stat <- clusGap(pcs,
+gapSatistic <- clusGap(pcs1,
                     FUN = pam,
-                    K.max = 10, #max clusters to consider
-                    B = 50) #total bootstrapped iterations
+                    K.max = 10, 
+                    B = 50) 
+
+fviz_gap_stat(gapSatistic)
 ```
 
 ```{r}
-fviz_gap_stat(gap_stat)
-```
-
-
-```{r}
-kmeansModel <- kmeans(pcs, centers = 2, nstart = 20)
+kmeansModel <- kmeans(pcs1, centers = 2, nstart = 20)
 ```
 
 ```{r}
-resultCluster <- cbind(cluster = kmeansModel$cluster, pcs)
+resultCluster <- cbind(cluster = kmeansModel$cluster, pcs1)
  
 fviz_cluster(kmeansModel, data = resultCluster, repel = TRUE, ggtheme = theme_bw())
 ```
-```{r}
-km_clusters<- eclust(x = pcs, FUNcluster = "kmeans", k = 3, seed = 123,
-  hc_metric = "euclidean", nstart = 50, graph = FALSE) 
 
-fviz_silhouette(sil.obj = km_clusters, print.summary = TRUE, palette = "jco",
-ggtheme = theme_classic())
-```
-
-```{r}
-pam_clusters <- pam(x = dfFinal, k = 2, metric = "manhattan")
-
-fviz_cluster(object = pam_clusters, data = df_toKmeans, ellipse.type = "t",
-  repel = TRUE) +
-theme_bw() +
-theme(legend.position = "none")
-```
+## 3.4 Conclusiones
 
 
 
+# 4. Prueba 2 - Datos agrupados por código de emergencia
+En esta parte voy a exponer un Análisis de Componentes Principales y un Análisis Cluster de los datos agrupados por por código de emergencia. Como recordatorio, en nuestro dataset del SAMUR, a cada una de las activaciones se le asigna un código de emergencia, para clasificarla en función del incidente. Esa columna es la que vamos a utilizar ahora para crear un nuevo dataframe, el cual contendrá las siguientes columnas:
 
+- **codigo**: Código de emergencia
 
+- **media_inter**: Media del tiempo de intervención.
 
+- **acti_totales**: Número de activaciones totales registradas a ese código.
 
+- **acti_canceladas**: Ratio de activaciones canceladas con ese código. En función de las activaciones totales del código.
 
+- **hospital**: Ratio de hospitalización en función de las activaciones realizadas.
 
+- **noche**: Ratio de activaciones realizadas por la noche. Considero noche todas las horas entre las 21:00 y las 9:00
 
-
-
-
-# PARTE 2 - ANÁLISIS CLUSTER POR TIPO DE ACTIVACIÓN
+He decidido prescindir de todos los registros que no tienen un código asignado, ya que no dan información relevante para este caso. Adicionalmente, investigando un poco me he dado cuenta de que el código "Pacientes en RCP Prolongada" solo ha ocurrido 1 vez en 7 años, y al parecer la activación fue cancelada ya que no disponemos de hora de intervención. Ya que este registro tampoco aporta información de valor en el análisis, he decidido prescindir de él también.
 
 ```{r}
-dfSamurProv
-```
+dfSamurTotal$noche <- ifelse(hour(dfSamurTotal$fecha_solicitud) >= 9 & hour(dfSamurTotal$fecha_solicitud) < 21, 0, 1)
 
-```{r}
-dfCode <- dfSamurProv %>% filter(!is.na(codigo)) %>% filter(codigo != "Pacientes en RCP prolongada")
+dfSamurPorCodigo <- dfSamurTotal %>% filter(!is.na(codigo)) %>% filter(codigo != "Pacientes en RCP prolongada")
 
-dfCode$noche <- ifelse(hour(dfCode$fecha_solicitud) >= 9 & hour(dfCode$fecha_solicitud) < 21, 1, 0)
-
-dfCode <- dfCode %>%
+dfSamurPorCodigo <- dfSamurPorCodigo %>%
   group_by(codigo) %>%
   summarize(
     media_inter = mean(tiempo_intervencion, na.rm = TRUE),
@@ -580,28 +499,101 @@ dfCode <- dfCode %>%
     hospital = mean(as.numeric(hospital), na.rm=T)
   )
 
-dfCode
+dfSamurPorCodigo
 ```
+
+```{r}
+nombresPrueba2 <- dfSamurPorCodigo$codigo
+dfPrueba2 <- select(dfSamurPorCodigo, -codigo)
+dfPrueba2
+```
+
+
+## 4.1 Análisis de los datos
+
+```{r}
+summary(dfPrueba2)
+```
+Al igual que pasaba con el ejemplo anterior, los datos están en escalas muy diferentes, cosa que habrá que tener en cuenta para el PCA y el análisis Cluster.
 
 
 ```{r}
-dfFinal2 <- dfCode %>% mutate(across(where(is.numeric), scale))
-codes <- dfFinal2$codigo
-dfFinal2 <- select(dfFinal2, -codigo)
-dfFinal2
+varianza = apply(X = dfPrueba2, MARGIN = 2, FUN = var)
+varianza
 ```
-pca
+Podemos observar que las varianzas en las tres últimas columnas (activaciones canceladas, noche y hospital) no son nada grandes, al contrario, los datos están bastante igualados.
 
 ```{r}
-rownames(dfFinal2) <- codes
-pca2 <- prcomp(dfFinal2, center = TRUE, scale = TRUE)
-pca2$rotation
+cor(dfPrueba2)
+```
+Aquí podemos observar que no hay datos con mucha covarianza. El único dato que destaca así mucho sería el ratio de activaciones por la noche y las cancelaciones.
+
+```{r}
+plot(dfPrueba2)
 ```
 
+### 4.1.1 Preguntas de interés
+
+#### ¿Qué código tiene más activaciones asignadas? ¿Y menos?
+```{r}
+dfSamurPorCodigo[order(-dfSamurPorCodigo$acti_totales), ]
+```
+El código que más se repite a lo largo de los 7 años es "Patología cardiovascular· con un total de casi 165.000 intervenciones totales, seguido de cerca de las intervenciones casuales. En último lugar tenemos los códigos referentes a la atención psicológica a Cuerpos de Seguridad y Bomberos, ocurriendo tan solo 2 y 1 vez respectivamente. Además destaca que ninguna de estas últimas requirió hospitalización y ocurrieron de día.
+
+#### ¿Qué código tiene mayor ratio de cancelaciones? ¿Y menos?
+```{r}
+dfSamurPorCodigo[order(-dfSamurPorCodigo$acti_canceladas), ]
+```
+El código con mayor ratio de cancelación, casi un 50% sería el "Servicio de formación / divulgación externa", seguido de cerca de los accidentes de tren. En último lugar tenemos 6 código que no han tenido ninguna cancelación en los 7 años que expande este dataset y llama la atención que muchos de estos son sobre atención psicológica.
+
+#### ¿Qué código tiene mayor ratio de hospitalizaciones? ¿Y menos?
+```{r}
+dfSamurPorCodigo[order(-dfSamurPorCodigo$hospital), ]
+```
+"Orden médica" y "Orden médica urgente / agresivo" son los dos códigos con mayor ratio de hospitalización, casi llegando al 95% de las veces. Como contexto, he cogido las definiciones que vienen dadas por el proveedor de los datos: 
+Orden médica: Traslado psiquiátrico forzoso ordenado por un medico
+Orden médica urgente / agresivo: Orden medica de traslado psiquiátrico urgente por peligrosidad/agresividad extrema del paciente
+
+Como información adicional, hay un total de 15 códigos que nunca han requerido hospitalización en estos 7 años. También es verdad, que no son códigos que generen muchas activaciones, ninguno de ellos pasa de las 100 en total.
+
+#### ¿Qué código suele pasar más por la noche? ¿Y por el día? ¿Hay más sucesos por la noche o por el día?
+```{r}
+dfSamurPorCodigo[order(-dfSamurPorCodigo$noche), ]
+```
+```{r}
+ggplot(dfSamurTotal, aes(x = noche)) +
+  geom_bar() +
+  labs(x = "Time of Day", y = "Number of Interventions", title = "Interventions Occurring During Day and Night")
+```
+Como se puede observar, la mayoría de las intervenciones ocurren de día, lo cual si se piensa tiene sentido ya que es cuando más gente hay despierta y más emergencias pueden ocurrir. El código que más ocurre por la noche, pero con tan solo un 27% de las veces sería el de divulgación y formación. Por el otro extremo, tenemos 13 códigos que no han surgido nunca entre las 9pm y 9 am.
+
+
+#### ¿Qué código tiene mayor media de tiempo de intervención? ¿Y menos?
+```{r}
+dfSamurPorCodigo[order(-dfSamurPorCodigo$media_inter), ]
+```
+
+
+## 4.2 Análisis de Componentes Principales (PCA)
+Una vez más, antes de realizar el análisis cluster voy a aplicar PCA al dataframe. Es importante tener en cuenta una vez más las escalas de los datos.
+
+```{r}
+dfPrueba2ConCodigo <- dfSamurPorCodigo %>% mutate(across(where(is.numeric), scale))
+dfPrueba2ConCodigo
+```
+
+```{r}
+dfPrueba2 <- select(dfPrueba2ConCodigo, -codigo)
+rownames(dfPrueba2) <- nombresPrueba2
+pca2 = prcomp(dfPrueba2, center = TRUE, scale = TRUE)
+pca1$rotation
+```
 
 ```{r}
 summary(pca2)
 ```
+Como vemos, los tres primeros componentes explican por sí mismos el 81% de la variabilidad.
+
 
 ```{r}
 plot(pca2, type = "l", main="Varianza por número de componentes")
@@ -609,56 +601,48 @@ plot(pca2, type = "l", main="Varianza por número de componentes")
 
 
 ```{r}
-biplot(x = pca2, scale = 0, cex = 0.9, col = c("grey", "blue"))
+biplot(x = pca2, scale = 0, cex = 0.9, col = c("grey", "lightgreen"))
 ```
 
-analisis cluster
+## 4.3 Análisis Cluster
+Visto lo visto en PCA, me quedo con los 3 primeros componentes, conteniendo un 81% de la variabilidad de los datos.
 
 ```{r}
 pcs2 <- pca2$x[, 1:3]
 ```
 
+Una vez más voy a aplicar el algoritmo K-Means para realizar el análisis cluster. Para averiguar la K, voy a aplicar de nuevo el "Elbow Method".
 
 
 ```{r}
-data_k <- pcs2 
-#Maximum number of clusters to test (sqrt(number of observations))
-#sqrt(number_of_rows)
-k_max <- as.integer(10)
- 
-# Create an empty vector to store the within-cluster sum of squares (wss)
-wss <- numeric(k_max)
+dataK <- pcs2 
 
-# Loop through different k values and calculate wss
-for (k in 1:k_max) {
-  # Perform k-means clustering with "k" clusters and set random seeds for reproducibility
-  set.seed(123)  # Replace 123 with any integer for different random starting points
-  kmeans_fit <- kmeans(data_k, centers = k, nstart = 50)
+maxK <- as.integer(10)
+ 
+wss <- numeric(maxK)
+
+for (k in 1:maxK) {
+  set.seed(123)  
   
-  # Extract the within-cluster sum of squares
+  kmeans_fit <- kmeans(dataK, centers = k, nstart = 50)
+  
   wss[k] <- kmeans_fit$tot.withinss
 }
+
+plot(1:maxK, wss, type = "b", main = "Elbow Method")
 ```
 
 ```{r}
-plot(1:k_max, wss, type = "b", main = "Elbow Method")
-```
-
-```{r}
-#calculate gap statistic based on number of clusters
-gap_stat <- clusGap(pcs2,
+gapSatistic <- clusGap(pcs2,
                     FUN = pam,
-                    K.max = 10, #max clusters to consider
-                    B = 50) #total bootstrapped iterations
+                    K.max = 10, 
+                    B = 50) 
+
+fviz_gap_stat(gapSatistic)
 ```
 
 ```{r}
-fviz_gap_stat(gap_stat)
-```
-
-
-```{r}
-kmeansModel <- kmeans(pcs2, centers = 3, nstart = 20)
+kmeansModel <- kmeans(pcs2, centers = 2, nstart = 20)
 ```
 
 ```{r}
@@ -667,19 +651,15 @@ resultCluster <- cbind(cluster = kmeansModel$cluster, pcs2)
 fviz_cluster(kmeansModel, data = resultCluster, repel = TRUE, ggtheme = theme_bw())
 ```
 
-```{r}
-km_clusters<- eclust(x = pcs2, FUNcluster = "kmeans", k = 3, seed = 123,
-  hc_metric = "euclidean", nstart = 50, graph = FALSE) 
 
-fviz_silhouette(sil.obj = km_clusters, print.summary = TRUE, palette = "jco",
-ggtheme = theme_classic())
-```
+## 4.4 Conclusiones
 
-```{r}
-pam_clusters <- pam(x = dfFinal2, k = 3, metric = "manhattan")
+# 5. Referencias y enlaces externos
+Datos abiertos del Ayuntamiento de Madrid (2023) Distritos del Municipio de Madrid [en línea] 
+disponible en https://datos.comunidad.madrid/catalogo/dataset/distritos_municipio_madrid
+[consulta: 06-03-2023]
 
-fviz_cluster(object = pam_clusters, data = df_toKmeans, ellipse.type = "t",
-  repel = TRUE) +
-theme_bw() +
-theme(legend.position = "none")
-```
+Datos abiertos del Ayuntamiento de Madrid (2023) Activaciones del SAMUR-Protección civil y 
+Clasificación del incidente (código y descripción) 2022 [en línea] disponible en:
+https://datos.madrid.es/portal/site/egob/menuitem.c05c1f754a33a9fbe4b2e4b284f1a5a0/?vgnextoid=50d7d35982d6f510VgnVCM1000001d4a900aRCRD&vgnextchannel=374512b9ace9f310VgnVCM100000171f5a0aRCRD&vgnextfmt=default [consulta: 06-03-2024]
+
