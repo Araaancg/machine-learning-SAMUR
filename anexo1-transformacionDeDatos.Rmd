@@ -252,8 +252,7 @@ dfGroupedByIncident
 Por último, eliminaremos del entorno los dataframes que no necesitamos, para dejarlo lo más limpio posible.
 
 ```{r}
-# rm(df)
-# rm(dfList)
-# rm(dfSamurTotal)
-# rm(dfInfoDistritos)
+rm(df)
+rm(dfList)
+rm(dfInfoDistritos)
 ```

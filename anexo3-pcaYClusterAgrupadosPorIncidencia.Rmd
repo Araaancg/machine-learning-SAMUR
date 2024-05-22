@@ -15,7 +15,6 @@ output:
 ---
 
 ```{r}
-# library(ggpubr)
 library(gridExtra)
 library(factoextra)
 library(ggplot2)
@@ -40,11 +39,11 @@ Podemos observar que las varianzas en las tres últimas columnas (activaciones c
 ```{r}
 cor(dfGroupedByIncident)
 ```
-Aquí podemos observar que no hay datos con mucha covarianza. El único dato que destaca así mucho sería el ratio de activaciones por la noche y las cancelaciones.
 
 ```{r}
 plot(dfGroupedByIncident)
 ```
+Aquí podemos observar que no hay datos con mucha covarianza. El único dato que destaca así mucho sería el ratio de activaciones por la noche y las cancelaciones.
 
 ### Preguntas de interés
 
@@ -112,15 +111,17 @@ select(dfGroupedByIncident[order(-dfGroupedByIncident$tie_medio_intervencion), ]
 Lo primero haremos será escalar los datos, dejando fuera las columnas de hospital, noche y activaciones canceladas, ya que esas no están en magnitudes desproporcionadas.
 
 ```{r}
-dfGroupedByIncident$tie_medio_intervencion <- scale(dfGroupedByIncident$tie_medio_intervencion)
-dfGroupedByIncident$activaciones_totales <- scale(dfGroupedByIncident$activaciones_totales)
-dfGroupedByIncident$noche <- scale(dfGroupedByIncident$noche)
+dfGroupedByIncidentScaled <- data.frame(dfGroupedByIncident)
+
+dfGroupedByIncidentScaled$tie_medio_intervencion <- scale(dfGroupedByIncidentScaled$tie_medio_intervencion)
+dfGroupedByIncidentScaled$activaciones_totales <- scale(dfGroupedByIncidentScaled$activaciones_totales)
+dfGroupedByIncidentScaled$noche <- scale(dfGroupedByIncidentScaled$noche)
 ```
 
 Aplicamos el PCA
 
 ```{r}
-pcaIncidents = prcomp(dfGroupedByIncident, center = TRUE, scale = TRUE)
+pcaIncidents = prcomp(dfGroupedByIncidentScaled)
 pcaIncidents$rotation
 ```
 
@@ -139,89 +140,43 @@ biplot(x = pcaIncidents, scale = 0, cex = 0.9, col = c("black", "blue"))
 ```
 
 # Análisis Cluster
-En esta sección veremos el análisis estadístico GAP para detemrianr el número óptimo de clústers, el análisis clúster con el algoritmo K-Means y por último el análisis silhoutte.
+En esta sección veremos el análisis estadístico GAP para determinar el número óptimo de clústers, el análisis clúster con el algoritmo K-Means y por último el análisis silhoutte.
 
 
 ```{r}
-gapSatisticIncidents <- clusGap(dfGroupedByIncident, FUN = pam, K.max = 10, B = 50)
+gapSatisticIncidentsScaled <- clusGap(dfGroupedByIncidentScaled, FUN = pam, K.max = 10, B = 50)
 
-fviz_gap_stat(gapSatisticIncidents)
+fviz_gap_stat(gapSatisticIncidentsScaled)
 ```
 
 ```{r}
-kmeansModel2KI <- kmeans(dfGroupedByIncident, centers = 2, nstart = 25)
-
-resultCluster <- cbind(cluster = kmeansModel2KI$cluster, dfGroupedByIncident)
-fviz_cluster(kmeansModel2KI,
-             data = resultCluster,
-             show.clust.cent = TRUE,
-             geom=c("point", "text"),
-             # ellipse = TRUE,
-             ellipse.type = "convex",
-             repel = TRUE,
-             ggtheme = theme_bw())
-```
-```{r}
-set.seed(123)
-
-kmeansModel4KI <- kmeans(dfGroupedByIncident, centers = 4, nstart = 25)
-
-resultCluster <- cbind(cluster = kmeansModel4KI$cluster, dfGroupedByIncident)
-fviz_cluster(kmeansModel4KI,
-             data = resultCluster,
-             show.clust.cent = TRUE,
-             geom=c("point", "text"),
-             # ellipse = TRUE,
-             ellipse.type = "convex",
-             repel = TRUE,
-             ggtheme = theme_bw())
-```
-
-```{r}
-diss_mat <- dist(dfGroupedByIncident)
-sil4KI <- silhouette(kmeansModel4KI$cluster, diss_mat)
-
-summary(sil4KI)
-```
-
-```{r}
-fviz_silhouette(sil4KI)
-```
+dfGroupedByIncidentNormalized <- data.frame(dfGroupedByIncident) 
 
 
-```{r}
-set.seed(123)
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
 
-kmeansModel5KI <- kmeans(dfGroupedByIncident, centers = 5, nstart = 25)
-
-resultCluster <- cbind(cluster = kmeansModel5KI$cluster, dfGroupedByIncident)
-fviz_cluster(kmeansModel5KI,
-             data = resultCluster,
-             show.clust.cent = TRUE,
-             geom=c("point", "text"),
-             # ellipse = TRUE,
-             ellipse.type = "convex",
-             repel = TRUE,
-             ggtheme = theme_bw())
-```
-
-```{r}
-sil5KI <- silhouette(kmeansModel5KI$cluster, diss_mat)
-
-summary(sil5KI)
-```
-
-```{r}
-fviz_silhouette(sil5KI)
+dfGroupedByIncidentNormalized$tie_medio_intervencion <- normalize(dfGroupedByIncidentNormalized$tie_medio_intervencion)
+dfGroupedByIncidentNormalized$activaciones_totales <- normalize(dfGroupedByIncidentNormalized$activaciones_totales)
+dfGroupedByIncidentNormalized$noche <- normalize(dfGroupedByIncidentNormalized$noche)
 ```
 
 ```{r}
 set.seed(123)
 
-kmeansModel7KI <- kmeans(dfGroupedByIncident, centers = 7, nstart = 25)
+gapSatisticIncidentNormalized <- clusGap(dfGroupedByIncidentNormalized, FUN = pam, K.max = 10, B = 50)
 
-resultCluster <- cbind(cluster = kmeansModel7KI$cluster, dfGroupedByIncident)
-fviz_cluster(kmeansModel7KI,
+fviz_gap_stat(gapSatisticIncidentNormalized)
+```
+
+```{r}
+set.seed(123)
+
+kmeansModel3KNI <- kmeans(dfGroupedByIncidentNormalized, centers = 3, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel3KNI$cluster, dfGroupedByIncidentNormalized)
+fviz_cluster(kmeansModel3KNI,
              data = resultCluster,
              show.clust.cent = TRUE,
              geom=c("point", "text"),
@@ -231,13 +186,15 @@ fviz_cluster(kmeansModel7KI,
              ggtheme = theme_bw())
 ```
 
-```{r}
-sil7KI <- silhouette(kmeansModel7KI$cluster, diss_mat)
 
-summary(sil7KI)
+```{r}
+diss_mat <- dist(dfGroupedByIncidentNormalized)
+sil3KNI <- silhouette(kmeansModel3KNI$cluster, diss_mat)
+
+summary(sil3KNI)
 ```
 
 ```{r}
-fviz_silhouette(sil7KI)
+fviz_silhouette(sil3KNI)
 ```
 

@@ -15,12 +15,12 @@ output:
 ---
 
 ```{r}
-# library(ggpubr)
 library(gridExtra)
 library(factoextra)
 library(ggplot2)
 library(tibble)
 library(cluster)
+library(dplyr)
 ```
 
 # Análisis de los datos
@@ -37,6 +37,7 @@ Lo primero que podemos observar es la discrepancia entre escalas en el dataframe
 varianza = apply(X = dfGroupedByDistrict, MARGIN = 2, FUN = var)
 varianza
 ```
+
 Las varianzas indican cosas realmente interesantes. En la media de tiempo que tarda el recurso en llegar a escena, la varianza es bastante alta, teniendo en cuenta que la media es 560 segundos y la varianza es 8611.892. En cambio, las varianzas de los ratios son bastante baja. No hay un distrito que predomine en hospitalizaciones o activaciones canceladas.
 
 
@@ -123,36 +124,38 @@ El distrito con mayor ratio de cancelación sería el distrito de Barajas. Como 
 # Ánalisis de Componentes Principales (PCA)
 
 ```{r}
+dfGroupedByDistrict <- dfGroupedByDistrict %<% column_to_rownames(var = "distrito")
+```
+
+
+Para ver conclusiones, mirar el informe principal.
+
+```{r}
 set.seed(123)
 ```
 
-
-Lo primero haremos será escalar los datos, dejando fuera las columnas de hospital y activaciones canceladas, ya que esas no están en magnitudes desproporcionadas.
-
-```{r}
-dfGroupedByDistrict$tie_medio_intervencion <- scale(dfGroupedByDistrict$tie_medio_intervencion)
-dfGroupedByDistrict$activaciones_totales <- scale(dfGroupedByDistrict$activaciones_totales)
-dfGroupedByDistrict$superficie <- scale(dfGroupedByDistrict$superficie)
-dfGroupedByDistrict$densidad_poblacion <- scale(dfGroupedByDistrict$densidad_poblacion)
-```
-
-Convertimos de nuevo la columna distrito a nombres de filas.
+Escalamos los datos
 
 ```{r}
-dfGroupedByDistrict <- dfGroupedByDistrict %>% column_to_rownames(var = "distrito")
+dfGroupedByDistrictScaled <- data.frame(dfGroupedByDistrict) 
+
+dfGroupedByDistrictScaled$tie_medio_intervencion <- scale(dfGroupedByDistrictScaled$tie_medio_intervencion)
+dfGroupedByDistrictScaled$activaciones_totales <- scale(dfGroupedByDistrictScaled$activaciones_totales)
+dfGroupedByDistrictScaled$superficie <- scale(dfGroupedByDistrictScaled$superficie)
+dfGroupedByDistrictScaled$densidad_poblacion <- scale(dfGroupedByDistrictScaled$densidad_poblacion)
 ```
 
 Aplicamos el PCA
 
 ```{r}
-pcaDistricts = prcomp(dfGroupedByDistrict, center = TRUE, scale = TRUE)
+pcaDistricts = prcomp(dfGroupedByDistrictScaled)
 pcaDistricts$rotation
 ```
 
 ```{r}
 summary(pcaDistricts)
 ```
-Como vemos, los tres primeros componentes explican por sí mismos casi el 88% de la variabilidad.
+Con los tres primeros componentes podemos explicar el 95% de la variabilidad. Inlcuso con los dos primeros ya tendríamos más de 3 tercio.
 
 ```{r}
 plot(pcaDistricts, type = "l", main="Varianza por número de componentes")
@@ -164,30 +167,57 @@ biplot(x = pcaDistricts, scale = 0, cex = 0.9, col = c("black", "blue"))
 ```
 
 # Análisis Cluster
-En esta sección veremos el análisis estadístico GAP para detemrianr el número óptimo de clústers, el análisis clúster con el algoritmo K-Means y por último el análisis silhoutte.
+
+Para ver conclusiones mirar el informe principal.
 
 ## Gap Statistic
 
+### Gap Statistic Escalado
+
 ```{r}
 set.seed(123)
 
-gapSatisticDistricts <- clusGap(dfGroupedByDistrict, FUN = pam, K.max = 10, B = 50)
+gapSatisticDistrictsScaled <- clusGap(dfGroupedByDistrictScaled, FUN = pam, K.max = 10, B = 50)
 
-fviz_gap_stat(gapSatisticDistricts)
+fviz_gap_stat(gapSatisticDistrictsScaled)
 ```
-ENTER INTERPRETACIÓN
-- explicacion de como funciona el gap statistc
-- por que creo que el numero optimo no debería ser 1, sino más mayor, ya que se va haciendo mas grande el lo que sea que mide
-- porque creo que estos datos es dificil hacer cluster, ya que hay mas distancia pero tambvien significa que esta empezando a dejar distritos separados
+
+### Gap Statistic Normalizado
+
+
+```{r}
+dfGroupedByDistrictNormalized <- data.frame(dfGroupedByDistrict) 
+
+
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+
+dfGroupedByDistrictNormalized$tie_medio_intervencion <- normalize(dfGroupedByDistrictNormalized$tie_medio_intervencion)
+dfGroupedByDistrictNormalized$activaciones_totales <- normalize(dfGroupedByDistrictNormalized$activaciones_totales)
+dfGroupedByDistrictNormalized$superficie <- normalize(dfGroupedByDistrictNormalized$superficie)
+dfGroupedByDistrictNormalized$densidad_poblacion <- normalize(dfGroupedByDistrictNormalized$densidad_poblacion)
+```
+
+```{r}
+set.seed(123)
+
+gapSatisticDistrictsNormalized <- clusGap(dfGroupedByDistrictNormalized, FUN = pam, K.max = 10, B = 50)
+
+fviz_gap_stat(gapSatisticDistrictsNormalized)
+```
+
+### Clustering
 
 
 ```{r}
 set.seed(123)
 
-kmeansModel2KD <- kmeans(dfGroupedByDistrict, centers = 2, nstart = 25)
+kmeansModel9KND <- kmeans(dfGroupedByDistrictNormalized, centers = 9, nstart = 25)
 
-resultCluster <- cbind(cluster = kmeansModel2KD$cluster, dfGroupedByDistrict)
-fviz_cluster(kmeansModel2KD,
+resultCluster <- cbind(cluster = kmeansModel9KND$cluster, dfGroupedByDistrictNormalized)
+fviz_cluster(kmeansModel9KND,
              data = resultCluster,
              show.clust.cent = TRUE,
              geom=c("point", "text"),
@@ -196,124 +226,17 @@ fviz_cluster(kmeansModel2KD,
              repel = TRUE,
              ggtheme = theme_bw())
 ```
-```{r}
-diss_mat <- dist(dfGroupedByDistrict)
-sil2KD <- silhouette(kmeansModel2KD$cluster, diss_mat)
 
-summary(sil2KD)
-```
-
-```{r}
-fviz_silhouette(sil2KD)
-```
+### Silhouette
 
 
 ```{r}
-set.seed(123)
+diss_mat <- dist(dfGroupedByDistrictNormalized)
+sil9KND <- silhouette(kmeansModel9KND$cluster, diss_mat)
 
-kmeansModel3KD <- kmeans(dfGroupedByDistrict, centers = 3, nstart = 25)
-
-resultCluster <- cbind(cluster = kmeansModel3KD$cluster, dfGroupedByDistrict)
-fviz_cluster(kmeansModel3KD,
-             data = resultCluster,
-             show.clust.cent = TRUE,
-             geom=c("point", "text"),
-             ellipse.type = "convex",
-             repel = TRUE,
-             ggtheme = theme_bw())
-```
-```{r}
-diss_mat <- dist(dfGroupedByDistrict)
-
-sil3KD <- silhouette(kmeansModel3KD$cluster, diss_mat)
-
-summary(sil3KD)
+summary(sil9KND)
 ```
 
 ```{r}
-fviz_silhouette(sil3KD)
+fviz_silhouette(sil9KND)
 ```
-
-
-```{r}
-set.seed(123)
-
-kmeansModel4KD <- kmeans(dfGroupedByDistrict, centers = 4, nstart = 25)
-
-resultCluster <- cbind(cluster = kmeansModel4KD$cluster, dfGroupedByDistrict)
-fviz_cluster(kmeansModel4KD,
-             data = resultCluster,
-             show.clust.cent = TRUE,
-             geom=c("point", "text"),
-             ellipse.type = "convex",
-             repel = TRUE,
-             ggtheme = theme_bw())
-```
-
-```{r}
-diss_mat <- dist(dfGroupedByDistrict)
-
-sil4KD <- silhouette(kmeansModel4KD$cluster, diss_mat)
-
-summary(sil4KD)
-```
-
-```{r}
-fviz_silhouette(sil4KD)
-```
-
-```{r}
-set.seed(123)
-kmeansModel5KD <- kmeans(dfGroupedByDistrict, centers = 5, nstart = 25)
-
-resultCluster <- cbind(cluster = kmeansModel5KD$cluster, dfGroupedByDistrict)
-fviz_cluster(kmeansModel5KD,
-             data = resultCluster,
-             show.clust.cent = TRUE,
-             geom=c("point", "text"),
-             ellipse.type = "convex",
-             repel = TRUE,
-             ggtheme = theme_bw())
-```
-```{r}
-diss_mat <- dist(dfGroupedByDistrict)
-
-sil5KD <- silhouette(kmeansModel5KD$cluster, diss_mat)
-
-summary(sil5KD)
-```
-
-```{r}
-fviz_silhouette(sil5KD)
-```
-
-```{r}
-set.seed(123)
-kmeansModel6KD <- kmeans(dfGroupedByDistrict, centers = 6, nstart = 25)
-
-resultCluster <- cbind(cluster = kmeansModel6KD$cluster, dfGroupedByDistrict)
-fviz_cluster(kmeansModel6KD,
-             data = resultCluster,
-             show.clust.cent = TRUE,
-             geom=c("point", "text"),
-             ellipse.type = "convex",
-             repel = TRUE,
-             ggtheme = theme_bw())
-```
-
-
-```{r}
-diss_mat <- dist(dfGroupedByDistrict)
-
-sil6KD <- silhouette(kmeansModel6KD$cluster, diss_mat)
-
-summary(sil6KD)
-```
-
-```{r}
-fviz_silhouette(sil6KD)
-```
-
-
-
-
