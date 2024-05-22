@@ -1,6 +1,17 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "Anexo 3. Prueba 2. Datos agrupados por incidencia"
+author: "Arancha Carpintero Guardiola"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: '6'
+    df_print: paged
+  html_notebook:
+    theme: flatly
+    toc: true
+    toc_float: true
+    toc_depth: 6
 ---
 
 ```{r}
@@ -150,68 +161,10 @@ fviz_cluster(kmeansModel2KI,
              repel = TRUE,
              ggtheme = theme_bw())
 ```
-
-
-```{r}
-standardErrors <- gapSatistic$Tab[, "SE.sim"]
-standardErrors
-```
-
-```{r}
-# (Assuming you already have 'gap_stat' from running clusGap())
-
-gap_values <- gapSatisticIncidents$Tab[, "gap"] # Extract gap statistic values
-k_max <- which.max(gap_values) # Find k with max gap statistic
-
-max_gap <- gap_values[k_max]
-max_se <- gapSatisticIncidents$Tab[k_max, "SE.sim"]
-
-# Apply the 1-SE Rule
-optimal_k <- 13  # Initialize with max k
-for (k in (k_max - 1):1) { # Iterate from k_max - 1 down to 1
-  threshold <- max_gap - max_se  # Calculate threshold
-  if (gap_values[k] >= threshold) {
-    optimal_k <- k
-    break 
-  }
-}
-
-print(paste("Optimal number of clusters (1-SE rule):", optimal_k))
-```
-
 ```{r}
 set.seed(123)
 
-kmeansModel2KI <- kmeans(dfGroupedByIncident, centers = 2, nstart = 25)
-
-resultCluster <- cbind(cluster = kmeansModel2KI$cluster, dfGroupedByIncident)
-fviz_cluster(kmeansModel2KI,
-             data = resultCluster,
-             show.clust.cent = TRUE,
-             geom=c("point", "text"),
-             # ellipse = TRUE,
-             ellipse.type = "convex",
-             repel = TRUE,
-             ggtheme = theme_bw())
-```
-
-
-```{r}
-diss_mat <- dist(dfGroupedByIncident)
-sil2KI <- silhouette(kmeansModel2KI$cluster, diss_mat)
-
-summary(sil2KI)
-```
-
-```{r}
-fviz_silhouette(sil2KI)
-```
-
-
-```{r}
-set.seed(123)
-
-kmeansModel4KI <- kmeans(dfGroupedByIncident, centers = 9, nstart = 25)
+kmeansModel4KI <- kmeans(dfGroupedByIncident, centers = 4, nstart = 25)
 
 resultCluster <- cbind(cluster = kmeansModel4KI$cluster, dfGroupedByIncident)
 fviz_cluster(kmeansModel4KI,
@@ -225,6 +178,7 @@ fviz_cluster(kmeansModel4KI,
 ```
 
 ```{r}
+diss_mat <- dist(dfGroupedByIncident)
 sil4KI <- silhouette(kmeansModel4KI$cluster, diss_mat)
 
 summary(sil4KI)
@@ -233,6 +187,7 @@ summary(sil4KI)
 ```{r}
 fviz_silhouette(sil4KI)
 ```
+
 
 ```{r}
 set.seed(123)
@@ -258,5 +213,31 @@ summary(sil5KI)
 
 ```{r}
 fviz_silhouette(sil5KI)
+```
+
+```{r}
+set.seed(123)
+
+kmeansModel7KI <- kmeans(dfGroupedByIncident, centers = 7, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel7KI$cluster, dfGroupedByIncident)
+fviz_cluster(kmeansModel7KI,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             # ellipse = TRUE,
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+
+```{r}
+sil7KI <- silhouette(kmeansModel7KI$cluster, diss_mat)
+
+summary(sil7KI)
+```
+
+```{r}
+fviz_silhouette(sil7KI)
 ```
 

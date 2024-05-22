@@ -3,6 +3,10 @@ title: "Anexo 2. Prueba 1. Datos agrupados por distrito"
 author: "Arancha Carpintero Guardiola"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
+  html_document:
+    toc: true
+    toc_depth: '6'
+    df_print: paged
   html_notebook:
     theme: flatly
     toc: true
