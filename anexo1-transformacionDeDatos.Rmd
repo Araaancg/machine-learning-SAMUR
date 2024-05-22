@@ -1,0 +1,259 @@
+---
+title: "Anexo 1. Transformación de datos"
+author: "Arancha Carpintero Guardiola"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: flatly
+    toc: true
+    toc_float: true
+    toc_depth: 6
+---
+# Transformación de los datos
+
+```{r}
+library(lubridate) # to work with dates
+library(dplyr)
+library(tibble)
+```
+
+En este anexo se expondrá todo el código pertinente a la transformación de datos. Con esta transformación se quiere conseguir dos dataframes, uno que nos dé información sobre distritos y uno que nos dé información sobre incidencias del SAMUR.
+
+## Manejo de los archivos CSV (SAMUR e información sobre distritos)
+
+### CSVs del SAMUR (2017-2023)
+Para la transformación de los csv del SAMUR aplicaremos los siguientes criterios:
+
+- Crear una columna nueva que indique el tiempo de respuesta del recurso. Básicamente el tiempo entre la hora de solicitud y la hora de intervención.
+
+- Cambiar los nombres de las columnas por dos razones: unificar sobre todo la columna distrito, ya que será el ancla entre nuestros csv y para evitar tildes y caracteres raros que puedan entorpercer el programa.
+
+- El campo hospital como tal no nos interesa, ya que el hospital elegido puede tener mucho que ver con la ubicación de la emergencia. En cambio, he decidido cambiar esta columna a una que indique si el paciente fue hospitalizado o no. Importante tener en cuenta que si el recurso fue cancelado, el registro tendrá esta columna vacía pero no por ausencia de hospitalización, sino por cancelación del recurso.
+
+- Cambiar los nombres de los distritos para que coincidan en todos los dataframes (samur-20xx e info-distritos)
+
+- Juntar todos los archivos del SAMUR en uno solo.
+
+Lo primero que haremos será ingestar los csv convirtiéndolos en dataframes y meterlos en una lista para ir iterando sobre ellos al realizar la trasnformación. Para este paso es crucial tener en cuenta la codificación averiguada anteriormente. Además, de paso, cambiamos los nombres de las columnas a los deseados, quitando tildes y juntando palabras con una barra baja, para que el resto del código sea más sencillo.
+
+```{r}
+csvNames <- list.files(path = "./data/samur", pattern = "\\.csv$", full.names = TRUE)
+dfList <- list()
+
+for (csv in csvNames) {
+  encoding <- ifelse(grepl("2017|2018|2019", csv), "ISO-8859-1", "UTF-8")
+  df <- read.csv(csv, sep = ";", header = TRUE, fileEncoding = encoding, na.strings = c("", " "))
+  
+  names(df) <- c("anio", "mes", "hora_solicitud", "hora_intervencion", "codigo", "distrito", "hospital")
+  
+  dfList[[length(dfList) + 1]] <- df
+}
+```
+
+El siguiente paso será aplicar la transforamción en función de los criterios expuestos anteriormente.
+
+```{r}
+monthMapping <- c("ENERO" = 1, "FEBRERO" = 2, "MARZO" = 3, "ABRIL" = 4, "MAYO" = 5, "JUNIO" = 6, 
+                   "JULIO" = 7, "AGOSTO" = 8, "SEPTIEMBRE" = 9, "OCTUBRE" = 10, "NOVIEMBRE" = 11, "DICIEMBRE" = 12)
+
+for (i in seq_along(dfList)) {
+
+  df <- dfList[[i]]
+  
+  df$mes <- monthMapping[df$mes]
+  
+  df$fecha <- paste0("1-", df$mes, "-", df$anio)
+  
+  # Crear una columna Fecha Solicitud la cual contendrá el Año, Mes y Hora de la solicitud
+  
+  df$fecha_solicitud <- as.POSIXct(strptime(paste(df$fecha, df$hora_solicitud), format = "%d-%m-%Y %H:%M:%S"))
+  
+  # Crear una columna Fecha Intervencion la cual contendrá el Año, Mes y Hora de la intervención. 
+  # Si la hora de intervención es más pequeña que la hora de solicitud es porque han pasado las 00:00 y habrá que añadir un día extra a la fecha
+  
+  df$fecha_intervencion <- as.POSIXct(strptime(paste(df$fecha, df$hora_intervencion), format = "%d-%m-%Y %H:%M:%S"))
+  df$fecha_intervencion <- ifelse(df$fecha_intervencion < df$fecha_solicitud, df$fecha_intervencion + days(1), df$fecha_intervencion)
+  df$fecha_intervencion <- as.POSIXct(df$fecha_intervencion, origin = "1970-01-01", tz = "Europe/Madrid")
+  
+  # Restar Fecha Solicitud y Fecha Intervencion para obtener los segundos que ha tardado el recurso en intervenir
+  
+  df$tiempo_intervencion <- ifelse(is.na(df$fecha_intervencion), NA, difftime(df$fecha_intervencion, df$fecha_solicitud, units = "secs"))
+
+  # Cambiar valores de la columna hospital para indicar posible hospitalización del paciente
+  df$hospital <- ifelse(is.na(df$fecha_intervencion), df$hospital, ifelse(is.na(df$hospital), 0, 1))
+
+  # Nos quedamos con las columnas que nos interesan
+  df <- df[, c("anio", "mes", "hora_solicitud", "tiempo_intervencion", "codigo", "distrito", "hospital")]
+  
+  # Cambiar los nombres de los distritos para posteriormente que coincidan con el otro df
+  districtsNames <- c(
+    "ARGANZUELA" = "Arganzuela",
+    "BARAJAS" = "Barajas",
+    "CARABANCHEL" = "Carabanchel",
+    "CENTRO" = "Centro",
+    "CHAMARTIN" = "Chamartin",
+    "CHAMBERI" = "Chamberi",
+    "CIUDAD LINEAL" = "Ciudad Lineal",
+    "FUENCARRAL" = "Fuencarral",
+    "HORTALEZA" = "Hortaleza",
+    "LATINA" = "Latina",
+    "MONCLOA" = "Moncloa",
+    "MORATALAZ" = "Moratalaz",
+    "RETIRO" = "Retiro",
+    "SALAMANCA" = "Salamanca",
+    "SAN BLAS" = "San Blas",
+    "TETUAN" = "Tetuan",
+    "USERA" = "Usera",
+    "VALLECAS PTE." = "Puente de Vallecas",
+    "VICALVARO" = "Vicalvaro",
+    "VILLA DE VALLECAS" = "Villa de Vallecas",
+    "VILLAVERDE" = "Villaverde"
+  )
+  df <- df %>%
+  mutate(distrito = ifelse(distrito %in% names(districtsNames), districtsNames[distrito], distrito))
+
+  dfList[[i]] <- df  
+}
+```
+
+Por último, combinamos todos los dataframes en uno.
+
+```{r}
+dfSamurTotal <- do.call(rbind, dfList)
+head(dfSamurTotal, 20) 
+```
+
+### CSV con la infroamción de los distritos
+
+Para la transformación de los csv del SAMUR aplicaremos los siguientes criterios:
+
+- Eliminar todas las columnas que no nos hacen falta. Solo queremos quedarnos con las columnas de distrito, superficie y densidad de población.
+
+- Cambiar los nombres de los distritos para que concuerden con el dataframe dfSamurTotal y que al juntarlos no dé problemas.
+
+``` {r}
+dfInfoDistritos <- read.csv("./data/info-distritos.csv", sep = ";", fileEncoding = "ISO-8859-1", header = TRUE)
+dfInfoDistritos <- select(dfInfoDistritos, -c("distrito_codigo", "municipio_codigo","municipio_nombre"))
+names(dfInfoDistritos) <- c("distrito", "superficie", "densidad_poblacion")
+
+districtsNames <- c(
+  "    Arganzuela " = "Arganzuela",
+  "    Barajas " = "Barajas",
+  "    Carabanchel " = "Carabanchel",
+  "    Centro " = "Centro",
+  "    Chamartín " = "Chamartin",
+  "    Chamberí " = "Chamberi",
+  "    Ciudad Lineal " = "Ciudad Lineal",
+  "    Fuencarral-El Pardo " = "Fuencarral",
+  "    Hortaleza " = "Hortaleza",
+  "    Latina " = "Latina",
+  "    Moncloa-Aravaca " = "Moncloa",
+  "    Moratalaz " = "Moratalaz",
+  "    Retiro " = "Retiro",
+  "    Salamanca " = "Salamanca",
+  "    San Blas-Canillejas " = "San Blas",
+  "    Tetuan " = "Tetuan",
+  "    Usera " = "Usera",
+  "    Puente de Vallecas " = "Puente de Vallecas",
+  "    Vicálvaro " = "Vicalvaro",
+  "    Villa de Vallecas " = "Villa de Vallecas",
+  "    Villaverde " = "Villaverde"
+)
+
+dfInfoDistritos <- dfInfoDistritos %>%
+  mutate(distrito = ifelse(distrito %in% names(districtsNames), districtsNames[distrito], distrito))
+
+dfInfoDistritos
+```
+
+## Creación de los dataframes agrupados
+En esta sección nos centraremos en trabajar con los dataframes creados en la sección anteiror para poder agruparlos de forma que se puedan aplicar los algoritmos de PCA y análisis cluster. 
+
+### Dataframe agrupado por distritos
+Para este dataframe el primer paso será juntar agrupar el dataframe con el total de activaciones del SAMUR distrito y posteriormente juntarlo con el dataframe con la inforamción de distritos. El dataframe que hay como objetivo contiene las siguientes columnas:
+
+- **distrito**: Nombre del distrito
+
+- **tie_medio_intervencion**: Media del tiempo de intervención medida en segundos.
+
+- **activaciones_totales**: Número de activaciones totales registradas a ese distrito.
+
+- **activaciones_canceladas**: Ratio de activaciones canceladas en ese distrito en función de las activaciones totales (del distrito)
+
+- **hospital**: Ratio de hospitalización en función de las activacioens totales del distrito.
+
+- **superficie**: Superficie total del distrito medida en kilómetros cuadrados.
+
+- **densidad_poblacion**: Densidad de población por cada kilómetro cuadrado.
+
+```{r}
+dfGroupedByDistrict <- dfSamurTotal %>% filter(!is.na(distrito))
+
+dfGroupedByDistrict <- dfGroupedByDistrict %>%
+  filter(!distrito %in% c("C.A.M.", "CARRETERAS Y CIRCUNVALACIONES", "LEGANES", "POZUELO", "FUERA TERMINO MUNICIPAL"))
+
+dfGroupedByDistrict <- dfGroupedByDistrict %>%
+  group_by(distrito) %>%
+  summarize(
+    tie_medio_intervencion = mean(tiempo_intervencion, na.rm = TRUE),
+    activaciones_totales = n(),
+    activaciones_canceladas = sum(is.na(tiempo_intervencion)) / n(),
+    hospital = mean(as.numeric(hospital), na.rm=T)
+  )
+
+
+dfGroupedByDistrict <- dfGroupedByDistrict %>%
+  merge(dfInfoDistritos, by = "distrito", all.x = TRUE) %>%
+  {df <- .; rownames(df) <- df[,1]; df[,-1]}
+dfGroupedByDistrict
+```
+
+### Dataframe agrupado por incidencias
+Para este dataframe únicamente haremos uso del dataframe dfSamurTotal y lo agruparemos por la columna "codigo". El dataframe final contendrá las siguientes columnas:
+
+- **codigo**: Código de emergencia.
+
+- **tie_medio_intervencion**: Media del tiempo de intervención medida en segundos.
+
+- **activaciones_totales**: Número de activaciones totales registradas a ese distrito.
+
+- **activaciones_canceladas**: Ratio de activaciones canceladas en ese distrito en función de las activaciones totales (del distrito)
+
+- **hospital**: Ratio de hospitalización en función de las activaciones totales del distrito.
+
+- **noche**: Ratio de activaciones realizadas por la noche. Se considera noche todas las horas entre las 21:00 y las 9:00
+
+Nota: se decide prescindir del código "Pacientes en RCP Prolongada"
+
+```{r}
+dfGroupedByIncident <- dfSamurTotal %>% 
+  filter(!is.na(codigo), codigo != "Pacientes en RCP prolongada") %>%
+  
+  mutate(
+    noche = ifelse(
+      hour(hms(hora_solicitud)) >= 9 & hour(hms(hora_solicitud)) < 21, 0, 1
+    )
+  ) %>%
+  
+  group_by(codigo) %>%
+  summarize(
+    tie_medio_intervencion = mean(tiempo_intervencion, na.rm = TRUE),
+    activaciones_totales = n(),
+    activaciones_canceladas = sum(is.na(tiempo_intervencion)) / n(),
+    noche = mean(noche, na.rm = TRUE),  
+    hospital = mean(as.numeric(hospital), na.rm = TRUE)
+  ) %>%
+  
+  column_to_rownames(var = "codigo") 
+
+dfGroupedByIncident
+```
+
+Por último, eliminaremos del entorno los dataframes que no necesitamos, para dejarlo lo más limpio posible.
+
+```{r}
+# rm(df)
+# rm(dfList)
+# rm(dfSamurTotal)
+# rm(dfInfoDistritos)
+```

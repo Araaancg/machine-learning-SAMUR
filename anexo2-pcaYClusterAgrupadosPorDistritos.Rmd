@@ -1,0 +1,315 @@
+---
+title: "Anexo 2. Prueba 1. Datos agrupados por distrito"
+author: "Arancha Carpintero Guardiola"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: flatly
+    toc: true
+    toc_float: true
+    toc_depth: 6
+---
+
+```{r}
+# library(ggpubr)
+library(gridExtra)
+library(factoextra)
+library(ggplot2)
+library(tibble)
+library(cluster)
+```
+
+# Análisis de los datos
+
+Resumen de los datos 
+
+```{r}
+summary(dfGroupedByDistrict)
+```
+
+Lo primero que podemos observar es la discrepancia entre escalas en el dataframe. No es lo mismo la escala de la columna del ratio de hospitalización que la escala de densidad de población. Esto será algo relevante a tener en cuenta a futuro cuadno realizemos el algoritmo de machine learning, ya que hay variables que pueden arrastar a otras.
+
+```{r}
+varianza = apply(X = dfGroupedByDistrict, MARGIN = 2, FUN = var)
+varianza
+```
+Las varianzas indican cosas realmente interesantes. En la media de tiempo que tarda el recurso en llegar a escena, la varianza es bastante alta, teniendo en cuenta que la media es 560 segundos y la varianza es 8611.892. En cambio, las varianzas de los ratios son bastante baja. No hay un distrito que predomine en hospitalizaciones o activaciones canceladas.
+
+
+```{r}
+cor(dfGroupedByDistrict)
+```
+
+```{r}
+plot(dfGroupedByDistrict)
+```
+
+Podemos observar algo que a priori parece contradictorio. Las activaciones totales y las activaciones canceladas no parecen moverse conjuntamente, ya que tienen una covarianza negativa. La densidad de población tampoco parece tener mucha relación con ninguna otra vairable, más que para el caso de la intervenciones totales y aun asi. Algo que me sorprende, por supuesto, es la densidad de población y la superficie. No parece que tengan ninguna relación.Tampoco parece tener mucha relación la media que tarda un recurso en llegar a la escena y la posible hospitalización del paciente.
+
+### Preguntas de interés
+
+```{r}
+dfGroupedByDistrict <- rownames_to_column(dfGroupedByDistrict, var = "distrito")
+```
+
+
+#### ¿Qué distrito tiene más intervenciones? ¿Y menos?
+El distrito con más intervenciones es el distrito Centro, estando muy por encima de cualquier otro distrito. Se puede deber a que es el distrito más turístico. Los distritos que menos intervenciones tiene son Vicálvaro, Moratalaz y Barajas.    
+
+```{r}
+pieChart <- ggplot(dfGroupedByDistrict, aes(x = "", y = activaciones_totales, fill = distrito, label = paste(distrito, "\n", activaciones_totales))) +
+  geom_bar(stat = "identity") +
+  coord_polar("y", start=0) +
+  geom_text(aes(label = paste(distrito, "\n", activaciones_totales)), position = position_stack(vjust = 0.5)) +
+  labs(title = "Intervenciones totales por distrito")+
+  scale_fill_grey() + 
+  theme_minimal()
+
+pieChart
+```
+
+
+#### ¿Qué distrito tiene mayor media de tiempo de intervención? ¿Y menos?
+```{r}
+barplot <- ggplot(dfGroupedByDistrict, aes(x = distrito, y = tie_medio_intervencion)) +
+  geom_bar(stat = "identity", fill = "grey") +
+  labs(title = "Tiempo de Intervención por Distrito", y = "Tiempo de Intervención", x = "Distrito") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  
+barplot
+```
+Barajas parece ser el distrito en el que los recursos tardan más en intervenir. El resto de distritos no parece tener mucha diferencia entre ellos, no hay picos que destacan. Como ya se vió en la varianza expuesta anteriormente, los datos no se alejan mucho de la media.
+
+
+#### ¿Cual es el distrito con mayor superficie? ¿Y menos? ¿Cual es el distrito con mayor densidad de población? ¿Y menos?
+
+```{r}
+plotArea <- ggplot(dfGroupedByDistrict, aes(x = distrito, y = superficie)) +
+  geom_bar(stat = "identity", fill = "black", alpha = 0.5) +
+  labs(title = "Superficie por Distrito", y = "Superficie (km2)", x = "Distrito") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  
+
+
+plotDensity <- ggplot(dfGroupedByDistrict, aes(x = distrito, y = densidad_poblacion)) +
+  geom_bar(stat = "identity", fill = "black", alpha = 0.5) +
+  labs(title = "Densidad de Población por Distrito", y = "Densidad de Población", x = "Distrito") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))  
+
+
+grid.arrange(plotArea, plotDensity, ncol = 2)
+```
+Podemos observar que el distrito Fuencarral se lleva el premio a distrito más grande, ya que abarca toda la superficie de El Pardo (nombre oficial del distrito: Fuencarral - El Pardo). La densidad de población, sin embargo, podríamos decir que es un poco más competitiva. Sigue habiendo muchas diferencias entre distritos, como Barajas y Ciudad Lineal, pero ya no hay un distrito que destaque por encima del resto.
+
+Algo que quizá sí puede llegar a destacar es, que aunque el distrito Centro es el que más intervenciones tiene por mucho, no está ni de lejos entre los tres primeros en densidad de población. Es por esto que pienso que se puede deber a la cantidad de oferta de ocio y turismo que ofrece y que atrae a mucha gente de fuera de la zona.
+
+
+#### ¿Cual es el distrito con mayor ratio de hospitalización? ¿Y menos? ¿Hay mucha diferencia entre el resto de distritos? ¿Y menos?
+ 
+```{r}
+select (dfGroupedByDistrict[order(-dfGroupedByDistrict$hospital), ], -c(tie_medio_intervencion, activaciones_totales, activaciones_canceladas, superficie, densidad_poblacion))
+```
+El distrito con mayor ratio de hospitalizacion es Villa de Vallecas y el que menos sería, el distrito Centro. Sin embargo, tampoco hay una diferencia muy grande entre Villa de Vallecas y el resto, todos oscilan entre el 30 y 40 porciento de activaciones canceladas.
+
+#### ¿Cual es el distrito con mayor ratio de intervenciones canceladas? ¿Y menos? ¿Hay mucha diferencia entre el resto de distritos?
+
+```{r}
+select (dfGroupedByDistrict[order(-dfGroupedByDistrict$activaciones_canceladas), ], -c(tie_medio_intervencion, activaciones_totales, hospital, superficie, densidad_poblacion))
+```
+El distrito con mayor ratio de cancelación sería el distrito de Barajas. Como podemos observar, tampoco hay mucha diferencia entre este distrito y el resto de locaclizaciones, al igual que ocurre con la hospitalización.
+
+# Ánalisis de Componentes Principales (PCA)
+
+```{r}
+set.seed(123)
+```
+
+
+Lo primero haremos será escalar los datos, dejando fuera las columnas de hospital y activaciones canceladas, ya que esas no están en magnitudes desproporcionadas.
+
+```{r}
+dfGroupedByDistrict$tie_medio_intervencion <- scale(dfGroupedByDistrict$tie_medio_intervencion)
+dfGroupedByDistrict$activaciones_totales <- scale(dfGroupedByDistrict$activaciones_totales)
+dfGroupedByDistrict$superficie <- scale(dfGroupedByDistrict$superficie)
+dfGroupedByDistrict$densidad_poblacion <- scale(dfGroupedByDistrict$densidad_poblacion)
+```
+
+Convertimos de nuevo la columna distrito a nombres de filas.
+
+```{r}
+dfGroupedByDistrict <- dfGroupedByDistrict %>% column_to_rownames(var = "distrito")
+```
+
+Aplicamos el PCA
+
+```{r}
+pcaDistricts = prcomp(dfGroupedByDistrict, center = TRUE, scale = TRUE)
+pcaDistricts$rotation
+```
+
+```{r}
+summary(pcaDistricts)
+```
+Como vemos, los tres primeros componentes explican por sí mismos casi el 88% de la variabilidad.
+
+```{r}
+plot(pcaDistricts, type = "l", main="Varianza por número de componentes")
+```
+
+
+```{r}
+biplot(x = pcaDistricts, scale = 0, cex = 0.9, col = c("black", "blue"))
+```
+
+# Análisis Cluster
+En esta sección veremos el análisis estadístico GAP para detemrianr el número óptimo de clústers, el análisis clúster con el algoritmo K-Means y por último el análisis silhoutte.
+
+## Gap Statistic
+
+```{r}
+set.seed(123)
+
+gapSatisticDistricts <- clusGap(dfGroupedByDistrict, FUN = pam, K.max = 10, B = 50)
+
+fviz_gap_stat(gapSatisticDistricts)
+```
+ENTER INTERPRETACIÓN
+- explicacion de como funciona el gap statistc
+- por que creo que el numero optimo no debería ser 1, sino más mayor, ya que se va haciendo mas grande el lo que sea que mide
+- porque creo que estos datos es dificil hacer cluster, ya que hay mas distancia pero tambvien significa que esta empezando a dejar distritos separados
+
+
+```{r}
+set.seed(123)
+
+kmeansModel2KD <- kmeans(dfGroupedByDistrict, centers = 2, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel2KD$cluster, dfGroupedByDistrict)
+fviz_cluster(kmeansModel2KD,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             # ellipse = TRUE,
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+```{r}
+diss_mat <- dist(dfGroupedByDistrict)
+sil2KD <- silhouette(kmeansModel2KD$cluster, diss_mat)
+
+summary(sil2KD)
+```
+
+```{r}
+fviz_silhouette(sil2KD)
+```
+
+
+```{r}
+set.seed(123)
+
+kmeansModel3KD <- kmeans(dfGroupedByDistrict, centers = 3, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel3KD$cluster, dfGroupedByDistrict)
+fviz_cluster(kmeansModel3KD,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+```{r}
+diss_mat <- dist(dfGroupedByDistrict)
+
+sil3KD <- silhouette(kmeansModel3KD$cluster, diss_mat)
+
+summary(sil3KD)
+```
+
+```{r}
+fviz_silhouette(sil3KD)
+```
+
+
+```{r}
+set.seed(123)
+
+kmeansModel4KD <- kmeans(dfGroupedByDistrict, centers = 4, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel4KD$cluster, dfGroupedByDistrict)
+fviz_cluster(kmeansModel4KD,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+
+```{r}
+diss_mat <- dist(dfGroupedByDistrict)
+
+sil4KD <- silhouette(kmeansModel4KD$cluster, diss_mat)
+
+summary(sil4KD)
+```
+
+```{r}
+fviz_silhouette(sil4KD)
+```
+
+```{r}
+set.seed(123)
+kmeansModel5KD <- kmeans(dfGroupedByDistrict, centers = 5, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel5KD$cluster, dfGroupedByDistrict)
+fviz_cluster(kmeansModel5KD,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+```{r}
+diss_mat <- dist(dfGroupedByDistrict)
+
+sil5KD <- silhouette(kmeansModel5KD$cluster, diss_mat)
+
+summary(sil5KD)
+```
+
+```{r}
+fviz_silhouette(sil5KD)
+```
+
+```{r}
+set.seed(123)
+kmeansModel6KD <- kmeans(dfGroupedByDistrict, centers = 6, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel6KD$cluster, dfGroupedByDistrict)
+fviz_cluster(kmeansModel6KD,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+
+
+```{r}
+diss_mat <- dist(dfGroupedByDistrict)
+
+sil6KD <- silhouette(kmeansModel6KD$cluster, diss_mat)
+
+summary(sil6KD)
+```
+
+```{r}
+fviz_silhouette(sil6KD)
+```
+
+
+
+

@@ -1,0 +1,262 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+# library(ggpubr)
+library(gridExtra)
+library(factoextra)
+library(ggplot2)
+library(tibble)
+library(cluster)
+```
+
+# Análisis de los datos
+
+```{r}
+summary(dfGroupedByIncident)
+```
+Al igual que pasaba con el ejemplo anterior, los datos están en escalas muy diferentes, cosa que habrá que tener en cuenta para el PCA y el análisis Cluster.
+
+
+```{r}
+varianza = apply(X = dfGroupedByIncident, MARGIN = 2, FUN = var)
+varianza
+```
+Podemos observar que las varianzas en las tres últimas columnas (activaciones canceladas, noche y hospital) no son nada grandes, al contrario, los datos están bastante igualados.
+
+```{r}
+cor(dfGroupedByIncident)
+```
+Aquí podemos observar que no hay datos con mucha covarianza. El único dato que destaca así mucho sería el ratio de activaciones por la noche y las cancelaciones.
+
+```{r}
+plot(dfGroupedByIncident)
+```
+
+### Preguntas de interés
+
+```{r}
+# dfGroupedByIncident <- rownames_to_column(dfGroupedByIncident, var = "codigo")
+```
+
+#### ¿Qué código tiene más activaciones asignadas? ¿Y menos?
+```{r}
+select(dfGroupedByIncident[order(-dfGroupedByIncident$activaciones_totales), ], -c(activaciones_canceladas, tie_medio_intervencion, noche, hospital))
+```
+El código que más se repite a lo largo de los 7 años es "Patología cardiovascular· con un total de casi 165.000 intervenciones totales, seguido de cerca de las intervenciones casuales. En último lugar tenemos los códigos referentes a la atención psicológica a Cuerpos de Seguridad y Bomberos, ocurriendo tan solo 2 y 1 vez respectivamente. Además destaca que ninguna de estas últimas requirió hospitalización y ocurrieron de día.
+
+#### ¿Qué código tiene mayor ratio de cancelaciones? ¿Y menos?
+```{r}
+select(dfGroupedByIncident[order(-dfGroupedByIncident$activaciones_canceladas), ], -c(activaciones_totales, tie_medio_intervencion, noche, hospital))
+```
+El código con mayor ratio de cancelación, casi un 50% sería el "Servicio de formación / divulgación externa", seguido de cerca de los accidentes de tren. En último lugar tenemos 6 código que no han tenido ninguna cancelación en los 7 años que expande este dataset y llama la atención que muchos de estos son sobre atención psicológica.
+
+#### ¿Qué código tiene mayor ratio de hospitalizaciones? ¿Y menos?
+```{r}
+select(dfGroupedByIncident[order(-dfGroupedByIncident$hospital), ], -c(activaciones_totales, tie_medio_intervencion, noche, activaciones_canceladas))
+```
+"Orden médica" y "Orden médica urgente / agresivo" son los dos códigos con mayor ratio de hospitalización, casi llegando al 95% de las veces. Como contexto, he cogido las definiciones que vienen dadas por el proveedor de los datos: 
+Orden médica: Traslado psiquiátrico forzoso ordenado por un medico
+Orden médica urgente / agresivo: Orden medica de traslado psiquiátrico urgente por peligrosidad/agresividad extrema del paciente
+
+Como información adicional, hay un total de 15 códigos que nunca han requerido hospitalización en estos 7 años. También es verdad, que no son códigos que generen muchas activaciones, ninguno de ellos pasa de las 100 en total.
+
+#### ¿Qué código suele pasar más por la noche? ¿Y por el día? ¿Hay más sucesos por la noche o por el día?
+```{r}
+select(dfGroupedByIncident[order(-dfGroupedByIncident$noche), ], -c(activaciones_totales, tie_medio_intervencion, hospital, activaciones_canceladas))
+```
+```{r}
+totalEvents <- sum(dfGroupedByIncident$activaciones_totales)
+nightProportion <- sum(dfGroupedByIncident$activaciones_totales * dfGroupedByIncident$noche) / totalEvents
+dayProportion <- 1 - nightProportion
+
+
+# Create data for the pie chart
+dayNightData <- data.frame(
+  Category = c("Noche", "Día"),
+  Proportion = c(nightProportion, dayProportion)
+)
+
+# Create the pie chart
+pieChart <- ggplot(dayNightData, aes(x = "", y = Proportion, fill = Category)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(round(Proportion * 100, 1), "%")), position = position_stack(vjust = 0.5)) +
+  labs(title = "Proporción de eventos entre día y noche") +
+  theme_void()  # Remove background elements
+
+pieChart
+```
+Como se puede observar, la mayoría de las intervenciones ocurren de día, lo cual si se piensa tiene sentido ya que es cuando más gente hay despierta y más emergencias pueden ocurrir. El código que más ocurre por la noche, pero con tan solo un 27% de las veces sería el de divulgación y formación. Por el otro extremo, tenemos 13 códigos que no han surgido nunca entre las 9pm y 9 am.
+
+
+#### ¿Qué código tiene mayor media de tiempo de intervención? ¿Y menos?
+```{r}
+select(dfGroupedByIncident[order(-dfGroupedByIncident$tie_medio_intervencion), ], -c(activaciones_totales, noche, hospital, activaciones_canceladas))
+```
+
+# Análisis de Componentes Principales (PCA)
+Lo primero haremos será escalar los datos, dejando fuera las columnas de hospital, noche y activaciones canceladas, ya que esas no están en magnitudes desproporcionadas.
+
+```{r}
+dfGroupedByIncident$tie_medio_intervencion <- scale(dfGroupedByIncident$tie_medio_intervencion)
+dfGroupedByIncident$activaciones_totales <- scale(dfGroupedByIncident$activaciones_totales)
+dfGroupedByIncident$noche <- scale(dfGroupedByIncident$noche)
+```
+
+Aplicamos el PCA
+
+```{r}
+pcaIncidents = prcomp(dfGroupedByIncident, center = TRUE, scale = TRUE)
+pcaIncidents$rotation
+```
+
+```{r}
+summary(pcaIncidents)
+```
+Como vemos, los cuatro primeros componentes explican por sí mismos casi el 88% de la variabilidad.
+
+```{r}
+plot(pcaIncidents, type = "l", main="Varianza por número de componentes")
+```
+
+
+```{r}
+biplot(x = pcaIncidents, scale = 0, cex = 0.9, col = c("black", "blue"))
+```
+
+# Análisis Cluster
+En esta sección veremos el análisis estadístico GAP para detemrianr el número óptimo de clústers, el análisis clúster con el algoritmo K-Means y por último el análisis silhoutte.
+
+
+```{r}
+gapSatisticIncidents <- clusGap(dfGroupedByIncident, FUN = pam, K.max = 10, B = 50)
+
+fviz_gap_stat(gapSatisticIncidents)
+```
+
+```{r}
+kmeansModel2KI <- kmeans(dfGroupedByIncident, centers = 2, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel2KI$cluster, dfGroupedByIncident)
+fviz_cluster(kmeansModel2KI,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             # ellipse = TRUE,
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+
+
+```{r}
+standardErrors <- gapSatistic$Tab[, "SE.sim"]
+standardErrors
+```
+
+```{r}
+# (Assuming you already have 'gap_stat' from running clusGap())
+
+gap_values <- gapSatisticIncidents$Tab[, "gap"] # Extract gap statistic values
+k_max <- which.max(gap_values) # Find k with max gap statistic
+
+max_gap <- gap_values[k_max]
+max_se <- gapSatisticIncidents$Tab[k_max, "SE.sim"]
+
+# Apply the 1-SE Rule
+optimal_k <- 13  # Initialize with max k
+for (k in (k_max - 1):1) { # Iterate from k_max - 1 down to 1
+  threshold <- max_gap - max_se  # Calculate threshold
+  if (gap_values[k] >= threshold) {
+    optimal_k <- k
+    break 
+  }
+}
+
+print(paste("Optimal number of clusters (1-SE rule):", optimal_k))
+```
+
+```{r}
+set.seed(123)
+
+kmeansModel2KI <- kmeans(dfGroupedByIncident, centers = 2, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel2KI$cluster, dfGroupedByIncident)
+fviz_cluster(kmeansModel2KI,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             # ellipse = TRUE,
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+
+
+```{r}
+diss_mat <- dist(dfGroupedByIncident)
+sil2KI <- silhouette(kmeansModel2KI$cluster, diss_mat)
+
+summary(sil2KI)
+```
+
+```{r}
+fviz_silhouette(sil2KI)
+```
+
+
+```{r}
+set.seed(123)
+
+kmeansModel4KI <- kmeans(dfGroupedByIncident, centers = 9, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel4KI$cluster, dfGroupedByIncident)
+fviz_cluster(kmeansModel4KI,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             # ellipse = TRUE,
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+
+```{r}
+sil4KI <- silhouette(kmeansModel4KI$cluster, diss_mat)
+
+summary(sil4KI)
+```
+
+```{r}
+fviz_silhouette(sil4KI)
+```
+
+```{r}
+set.seed(123)
+
+kmeansModel5KI <- kmeans(dfGroupedByIncident, centers = 5, nstart = 25)
+
+resultCluster <- cbind(cluster = kmeansModel5KI$cluster, dfGroupedByIncident)
+fviz_cluster(kmeansModel5KI,
+             data = resultCluster,
+             show.clust.cent = TRUE,
+             geom=c("point", "text"),
+             # ellipse = TRUE,
+             ellipse.type = "convex",
+             repel = TRUE,
+             ggtheme = theme_bw())
+```
+
+```{r}
+sil5KI <- silhouette(kmeansModel5KI$cluster, diss_mat)
+
+summary(sil5KI)
+```
+
+```{r}
+fviz_silhouette(sil5KI)
+```
+
