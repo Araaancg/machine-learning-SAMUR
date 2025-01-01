@@ -8,7 +8,6 @@ Este proyecto tiene como objetivo aplicar técnicas de machine learning para ana
 
 Los datos provienen de archivos CSV que incluyen registros de activaciones de emergencias y datos de los distritos de Madrid. El análisis busca descubrir patrones y tendencias en las operaciones, agrupando la información por distrito y tipo de incidencia.
 
----
 
 ## Tecnologías y Lenguajes
 
@@ -21,8 +20,7 @@ Los datos provienen de archivos CSV que incluyen registros de activaciones de em
   - ggplot2
   - cluster
 - **IDE**: RStudio
-
----
+- 
 
 ## Key Features
 
@@ -32,7 +30,6 @@ Los datos provienen de archivos CSV que incluyen registros de activaciones de em
 - Visualización de resultados utilizando **ggplot2** y **cluster**.
 - Resultados y conclusiones detalladas en un archivo PDF adjunto.
 
----
 
 ## Instalación y Ejecución
 
@@ -43,7 +40,6 @@ Los datos provienen de archivos CSV que incluyen registros de activaciones de em
 2. Para poder ver el código fuente, abrir los archivos .Rmd con RStudio.
 3. Para poder visualizar el proyecto de una forma más formal, abrir con el navegador los archivos nb.html.
 
----
 
 ## Detectar Codificación de Archivos
 Al ser archivos externos, cuando los importamos en R tenemos que tener en cuenta la codificación que pueden tener. En este caso, hay un archivo adicional en el repositorio que se llama `detectEncoding.py` que contiene un pequeño programa que retorna las codificaciones de los archivos utilizados.
